@@ -8,7 +8,7 @@
 
 <script>
 import {defineComponent} from 'vue';
-import images from "src/images/imagesEnum";
+import images from "src/imagesEnum";
 
 export default defineComponent({
   name: 'IndexPage',

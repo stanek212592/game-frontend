@@ -1,9 +1,21 @@
-// H: Nastavení prostředí
-module.exports = {
-  publicPath: '/game-frontend',
-  backendServer: 'https://prsi-stanek212592-0b8e3721.koyeb.app/',
-  requestTimeout: 10000,
-  version: '0.1.0',
-  leftMenuWidth: 220,
-  minimumViewPort: 500,
+// Nastavení hry
+export default {
+
+  scene: {},
+
+  // Nastavení animací a pohybů
+  animate: {
+    speed: 1,
+    stepSize: 8,
+    angleSize: Math.PI / 20,
+    maxCardsPerRow: 7,
+    cardOverlap: 1.3,
+    cardAngleView: -Math.PI / 2 - 0.8
+  },
+
+  // Nastavení velikosti karet
+  card: {size: 2, width: 50, height: 80, radius: 6, depth: 0.1},
+
+  // Nastavení velikosti stolu
+  tableSize: {height: 300, radius: 650},
 }

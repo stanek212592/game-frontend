@@ -1,9 +1,10 @@
 import * as THREE from 'three'
-import imagesEnum from "src/images/imagesEnum";
+import imagesEnum from "src/imagesEnum";
 import elementsEnum from "components/game/elementsEnum";
+import appConfig from "app/appConfig";
 
 //  Definice rozměrů karty
-const config = {size: 2, width: 50, height: 80, radius: 6, depth: 0.1}
+const config = appConfig.card //{size: 2, width: 50, height: 80, radius: 6, depth: 0.1}
 export default {config, createCard, select}
 
 const textureLodaer = new THREE.TextureLoader()

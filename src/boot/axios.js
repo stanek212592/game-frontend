@@ -1,7 +1,7 @@
 import {boot} from 'quasar/wrappers'
 import axios from 'axios'
 import {appSetting} from "stores/appSetting";
-// import appConfig from "/appConfig.js"
+
 
 
 // Be careful when using SSR for cross-request state pollution
@@ -10,11 +10,10 @@ import {appSetting} from "stores/appSetting";
 // good idea to move this instance creation inside of the
 // "export default () => {}" function below (which runs individually
 // for each client)
-// console.log('process')
-// console.log(process.env.APP_URL)
+
 const api = axios.create({
   // baseURL: '/api',
-  baseURL: process.env.backendServer ? process.env.backendServer : process.env.VUE_ROUTER_BASE + 'api',
+  baseURL: process.env.backendServer,
   timeout: 5000 // Timeout 5000 milisekund (5 sekund)
 })
 
@@ -43,7 +42,7 @@ const get = async (url) => {
 const post = async (url, data, lock = false) => {
   if (lock) appSetting().lock()
   return new Promise((resolve, reject) => {
-    api.post(requestUrl(url), data, {timeout: Number(process.env.requestTimeout)})
+    api.post(requestUrl(url), data)
       .then(resp => {
         resolve(resp.data)
       })

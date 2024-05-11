@@ -12,7 +12,7 @@
 
 const {configure} = require('quasar/wrappers');
 const path = require('path');
-const appConfig = require("./appConfig.js");
+const appConfig = require("./envConfig.js");
 //
 
 // const appConfig = {
@@ -121,7 +121,7 @@ module.exports = configure(function (/* ctx */) {
       // }
       // proxy: 'http://localhost:8080',
       https: false,
-      port: 8001,
+      port: 8000,
       open: false
       // // https: true
       // open: false, //true // opens browser window automatically

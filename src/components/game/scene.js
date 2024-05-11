@@ -1,9 +1,10 @@
 import * as THREE from "three";
-import images from "src/images/imagesEnum";
+import images from "src/imagesEnum";
 import elementsEnum from "components/game/elementsEnum";
+import appConfig from "app/appConfig";
 
 // Rozměry stolu
-const tableConfig = {height: 300, radius: 1500}
+const tableConfig = appConfig.tableSize // {height: 300, radius: 750}
 
 export default {tableConfig, create, createSky, createEarth, createTable}
 

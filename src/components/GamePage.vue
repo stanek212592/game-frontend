@@ -25,7 +25,7 @@ import Controls from "components/game/controls"
 import {game} from "stores/game";
 import {user} from "stores/user";
 import elementsEnum from "components/game/elementsEnum";
-import imagesEnum from "src/images/imagesEnum";
+import imagesEnum from "src/imagesEnum";
 
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
@@ -126,7 +126,6 @@ export default defineComponent({
           console.log('rozdáno')
         })
     },
-
 
 
     // Rozdávání karet z balíčku jednotlivým hráčů
@@ -428,8 +427,8 @@ export default defineComponent({
         await this.moveCardTo(repositionedCard, {x: originalPosition.x, z: originalPosition.z})
       }
 
-      // Zobrazení obrázku na kartě
-      const newCard = Cards.createCard(1,)
+      // // Zobrazení obrázku na kartě
+      // const newCard = Cards.createCard(1,)
 
       // Odhození karty
       return new Promise(async (resolve) => {
@@ -438,7 +437,11 @@ export default defineComponent({
         else game().userActionDisabled = false
         await this.rotateCardBy(card, Math.PI / 2 + game().animate.cardAngleView);
         await this.moveCardTo(card, destination)
-        await this.rotateCardTo(card, -Math.PI / 2, 0, 1)
+
+        // await this.rotateCardTo(card, -Math.PI / 2, 0, 1)
+        const randZ = this.round(Math.random() * 2 * Math.PI)
+        await this.rotateCardTo(card, -Math.PI / 2, 0, randZ)
+
         await this.moveCardVertically(card, undefined, targetHeight)
         card.params.selectable = true
         resolve(true)
@@ -582,7 +585,6 @@ export default defineComponent({
         renderer.render(scene, camera)
       }
 
-      animate()
 
       // Uložení do proměnných komponenty
       this.scene = scene
@@ -592,14 +594,18 @@ export default defineComponent({
       this.gameContainerHeight = height
 
       this.changeCameraView(this.cameraView.PLAYER)
+
+      animate()
+
     },
 
     changeCameraView(newView) {
+      console.log('changeCameraView(newView)')
+      console.log(JSON.stringify(newView))
       if (!newView) newView = game().cameraView
 
       const camera = this.camera
       const cameraView = this.cameraView
-
       const playerPoint = game().players.find(p => p.main)?.point || {x: 0, z: Scene.tableConfig.radius}
       switch (newView) {
         case null:
@@ -614,6 +620,10 @@ export default defineComponent({
           camera.position.set(0, playerPoint.z * 2.5, 0);
           break;
       }
+
+
+      console.log('playerPoint.z: ' + playerPoint.z       )
+
       game().cameraView = newView
     },
 

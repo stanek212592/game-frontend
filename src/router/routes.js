@@ -1,7 +1,7 @@
 const routes = [
     {
         path: '/',
-        component: () => import('components/layouts/MainLayout.vue'),
+        component: () => import('components/Layout.vue'),
         children: [
             {path: '', component: () => import('components/IndexPage.vue')},
             {path: 'game', component: () => import('components/GamePage.vue')},
@@ -10,7 +10,7 @@ const routes = [
     },
     {
         path: '/:catchAll(.*)*',
-        component: () => import('components/layouts/MainLayout.vue'),
+        component: () => import('components/Layout.vue'),
         children: [
             {path: '', component: () => import('components/ErrorNotFound.vue')}
         ]
