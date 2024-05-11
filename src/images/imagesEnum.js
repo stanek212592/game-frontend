@@ -1,22 +1,21 @@
 // Cesty k obrázku a texturám
 export default Object.freeze({
 
-  WOOD: {path: 'src/images/textures/wood.jpg', type: 'texture'},
-  SKY: {path: 'src/images/textures/sky.jpg', type: 'texture'},
-  GRASS: {path: 'src/images/textures/grass.jpg', type: 'texture'},
+  WOOD: {path: process.env.backendServer + 'app/image/t_wood', type: 'texture'},
+  SKY: {path: process.env.backendServer + 'app/image/t_sky', type: 'texture'},
+  GRASS: {path: process.env.backendServer + 'app/image/t_grass', type: 'texture'},
 
-  // LOGO: {path: 'src/images/gui_elements/zoo-background.jpg', label: 'Moje Zoo', type: 'image'},
-  LOGO: {path: 'src/images/gui_elements/background.jpg', label: 'Karetní hra prší', type: 'image'},
+  LOGO: {path: process.env.backendServer + 'app/image/a_background', label: 'Karetní hra prší', type: 'image'},
 
 
-  CARD_BACK: {path: 'src/images/card_elements/back.jpg', type: 'image'},
+  CARD_BACK: {path: process.env.backendServer + 'app/image/c_back', type: 'image'},
   CARDS: {
-    '1': {path: 'src/images/card_elements/lion_M.jpg', type: 'image', label: 'LION_M'},
-    '2': {path: 'src/images/card_elements/lion_F.jpg', type: 'image', label: 'LION_F'},
-    '3': {path: 'src/images/card_elements/lion_C.jpg', type: 'image', label: 'LION_C'},
-    '4': {path: 'src/images/card_elements/elephant_M.jpg', type: 'image', label: 'ELEPHANT_M'},
-    '5': {path: 'src/images/card_elements/elephant_F.jpg', type: 'image', label: 'ELEPHANT_F'},
-    '6': {path: 'src/images/card_elements/elephant_C.jpg', type: 'image', label: 'ELEPHANT_C'},
+    '1': {path: process.env.backendServer + 'app/image/c_6', type: 'image', label: 'LION_M'},
+    '2': {path: process.env.backendServer + 'app/image/c_5', type: 'image', label: 'LION_F'},
+    '3': {path: process.env.backendServer + 'app/image/c_4', type: 'image', label: 'LION_C'},
+    '4': {path: process.env.backendServer + 'app/image/c_1', type: 'image', label: 'ELEPHANT_M'},
+    '5': {path: process.env.backendServer + 'app/image/c_3', type: 'image', label: 'ELEPHANT_F'},
+    '6': {path: process.env.backendServer + 'app/image/c_2', type: 'image', label: 'ELEPHANT_C'},
   },
 
 })
