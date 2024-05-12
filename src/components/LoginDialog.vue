@@ -23,7 +23,7 @@
       </div>
       <!--            <hr>-->
       <q-card-actions align="right" class="text-primary">
-        <q-btn flat color="secondary" :label="$t('zrusit')" v-close-popup/>
+        <q-btn v-if="!noStornoBtn" flat color="secondary" :label="$t('zrusit')" v-close-popup/>
         <q-btn flat :label="$t('prihlasit')" @click="loginUser"
                :disable="!user.login || !user.password || !!user.warning"/>
       </q-card-actions>
@@ -39,7 +39,8 @@ import {defineComponent} from 'vue'
 export default defineComponent({
   name: "LoginDialog",
   props: {
-    modelValue: {type: Boolean, default: false,}
+    modelValue: {type: Boolean, default: false,},
+    noStornoBtn:  {type: Boolean, default: false,},
   },
   data: () => ({
     user: {
@@ -70,7 +71,7 @@ export default defineComponent({
       this.$post('/user_auth', data, true)
         .then(resp => {
           if (!resp) return
-          userStore().setJwt(resp)
+          userStore().setUser(resp)
           this.closeDialog()
         })
     }

@@ -1,7 +1,7 @@
 import {boot} from 'quasar/wrappers'
 import axios from 'axios'
 import {appSetting} from "stores/appSetting";
-
+import {user} from "stores/user";
 
 
 // Be careful when using SSR for cross-request state pollution
@@ -17,6 +17,27 @@ const api = axios.create({
   timeout: 5000 // Timeout 5000 milisekund (5 sekund)
 })
 
+api.interceptors.request.use((config) => {
+
+ // Přepínání adresa pro vývoj
+  if (process.env.DEV) {
+    config.baseURL = appSetting().local ? process.env.backendLocal : process.env.backendServer
+    // console.log(config.baseURL)
+  }
+
+  const token = user().token
+  if (token && isTokenExpired(token)) {
+    console.log('expirovaný token')
+  }
+  if (token) {
+    config.headers['Authorization'] = `Bearer ${token}`;
+  }
+  return config;
+}, (error) => {
+  return Promise.reject(error);
+});
+
+
 const requestUrl = (url) => {
   if (!url.toString().startsWith('/')) url = '/' + url
   // speciální případy - přihlašování
@@ -31,17 +52,42 @@ const handleExceptions = e => {
 }
 
 // Get dle požadavků aplikace
-const get = async (url) => {
-  const resp = await api.get(url)
-  console.log(resp)
-  return resp
+const get = async (url, data, lock = false, controls) => {
+  if (lock) appSetting().lock()
+
+  const CancelToken = axios.CancelToken;
+  const source = CancelToken.source();
+
+
+  const promise =  new Promise((resolve, reject) => {
+    api.get(requestUrl(url), {params: data, cancelToken: source.token})
+      .then(resp => {
+        resolve(resp.data)
+      })
+      .catch(e => {
+        handleExceptions(e)
+        resolve(null)
+      })
+      .finally(() => {
+        if (lock) appSetting().unlock()
+      })
+  })
+
+  if (controls) {
+    controls.cancel = () => source.cancel()
+  }
+  return promise
 }
 
 
 // Post dle požadavků aplikace
-const post = async (url, data, lock = false) => {
+const post = async (url, data, lock = false, controls) => {
   if (lock) appSetting().lock()
-  return new Promise((resolve, reject) => {
+
+  const CancelToken = axios.CancelToken;
+  const source = CancelToken.source();
+
+  const promise =  new Promise((resolve, reject) => {
     api.post(requestUrl(url), data)
       .then(resp => {
         resolve(resp.data)
@@ -56,18 +102,22 @@ const post = async (url, data, lock = false) => {
         if (lock) appSetting().unlock()
       })
   })
+  if (controls) {
+    controls.cancel = () => source.cancel()
+  }
+  return promise
 }
 
 export default boot(({app}) => {
-  // for use inside Vue files (Options API) through this.$axios and this.$api
-
-  app.config.globalProperties.$axios = axios
-  // ^ ^ ^ this will allow you to use this.$axios (for Vue Options API form)
-  //       so you won't necessarily have to import axios in each vue file
-
-  app.config.globalProperties.$api = api
-  // ^ ^ ^ this will allow you to use this.$api (for Vue Options API form)
-  //       so you can easily perform requests against your app's API
+  // // for use inside Vue files (Options API) through this.$axios and this.$api
+  //
+  // app.config.globalProperties.$axios = axios
+  // // ^ ^ ^ this will allow you to use this.$axios (for Vue Options API form)
+  // //       so you won't necessarily have to import axios in each vue file
+  //
+  // app.config.globalProperties.$api = api
+  // // ^ ^ ^ this will allow you to use this.$api (for Vue Options API form)
+  // //       so you can easily perform requests against your app's API
 
   app.config.globalProperties.$get = get
   app.config.globalProperties.$post = post
@@ -75,3 +125,18 @@ export default boot(({app}) => {
 
 
 // export {axios, api, get, post}
+function isTokenExpired(token) {
+  const decoded = jwtDecode(token);
+  const currentTime = Date.now() / 1000;
+  return decoded.exp < currentTime;
+}
+
+function jwtDecode(token) {
+  const base64Url = token.split('.')[1];
+  const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+  const jsonPayload = decodeURIComponent(atob(base64).split('').map(function (c) {
+    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+  }).join(''));
+
+  return JSON.parse(jsonPayload);
+}

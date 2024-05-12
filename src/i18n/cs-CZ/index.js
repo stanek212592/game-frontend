@@ -9,4 +9,7 @@ export default {
   heslo: 'Heslo',
   neplatne_prihlasovaci_udaje: 'Neplatné přihlašovací údaje',
   chyba_spojeni_se_serverem: 'Chyba spojení se serverem',
+  hra_nova: 'Nová hra',
+  hra_stop: 'Zastavit hru',
+
 }

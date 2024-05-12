@@ -6,7 +6,7 @@ import appConfig from "app/appConfig";
 // Rozměry stolu
 const tableConfig = appConfig.tableSize // {height: 300, radius: 750}
 
-export default {tableConfig, create, createSky, createEarth, createTable}
+export default {tableConfig, create, createSky, createEarth, createTable, createTableMaterial}
 
 const textureLoader = new THREE.TextureLoader();
 const worldRadius = 5000
@@ -49,8 +49,22 @@ function createEarth() {
   return earth
 }
 
+function createTableMaterial() {
+  const woodTexture = textureLoader.load(images.WOOD.path)
+  woodTexture.wrapS = THREE.RepeatWrapping
+  woodTexture.wrapT = THREE.RepeatWrapping
+  woodTexture.repeat.set(5, 5)
 
-function createTable(countEdges = 2) {
+  return new THREE.MeshBasicMaterial({
+    map: woodTexture,
+    side: THREE.DoubleSide
+  })
+
+}
+
+function createTable(countEdges = 2,tableMaterial) {
+  if (!tableMaterial) tableMaterial = createTableMaterial()
+
   // Kontrola, že vstupem je číslo a není menší než 4
   countEdges = Math.floor(Number(countEdges))
   if (isNaN(countEdges) || countEdges < 4) return null
@@ -58,20 +72,8 @@ function createTable(countEdges = 2) {
   const
     configDepth = tableConfig.radius / 20,
     configHeight = tableConfig.height,
-    configRadius = tableConfig.radius, /// 2 * Math.cos(Math.PI / countEdges),
-    configLegRadius = tableConfig.radius / 20 // 2// / Math.sin(Math.PI / countEdges) // přepočet vepsané kružnice na opsanou
-
-
-  const woodTexture = textureLoader.load(images.WOOD.path)
-  woodTexture.wrapS = THREE.RepeatWrapping
-  woodTexture.wrapT = THREE.RepeatWrapping
-  woodTexture.repeat.set(5, 5)
-
-  const tableMaterial = new THREE.MeshBasicMaterial({
-    map: woodTexture,
-    side: THREE.DoubleSide
-  })
-
+    configRadius = tableConfig.radius,
+    configLegRadius = tableConfig.radius / 20
 
   const table = new THREE.Group();
   // Vytvožení desky stolu
@@ -89,22 +91,9 @@ function createTable(countEdges = 2) {
   deskMesh.position.y = configHeight - configDepth / 2
   table.add(deskMesh)
 
-  // Testovací kruh
-  // const deskGeometry2 =
-  //     new THREE.CylinderGeometry(
-  //         tableConfig.radius,
-  //         tableConfig.radius,
-  //         configDepth,
-  //         100,
-  //         1,
-  //         false,
-  //         Math.PI / countEdges
-  //     );
-  // const deskMesh2 = new THREE.Mesh(deskGeometry2, new THREE.MeshBasicMaterial({color: '#451278'}))
-  // table.add(deskMesh2)
-
   const tempDiameter = (configRadius - configLegRadius) * 0.9
   const startAngle = 2 * Math.PI / countEdges / 2
+
   // Vytvoření noh stolu
   for (let i = 0; i < countEdges; i++) {
     const legGeometry =
@@ -115,7 +104,6 @@ function createTable(countEdges = 2) {
     legMesh.position.y = configHeight / 2
     table.add(legMesh)
   }
-  // table.position.y -= 60
 
   table.name = elementsEnum.TABLE
   return table

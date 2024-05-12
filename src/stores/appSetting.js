@@ -7,6 +7,7 @@ export const appSetting = defineStore('appSetting', {
     minimumViewPort: process.env.minimumViewPort,
     showMenu: true,
     menuSelectedItem: '',
+    local: false,
   }),
   getters: {
     getLocked(state) {

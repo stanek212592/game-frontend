@@ -1,5 +1,8 @@
 <template>
   <div class="height-100 width-100 fp-column game-page" ref="gamePage">
+    <div v-if="loading" class="overlay">
+      <span class="overlay-text">Načítání hry</span>
+    </div>
     <div id="gameContainer" ref="gameContainer" class="game-container"/>
     <div class="game-toolbar">
       hra: {{ isGameActive }}, hráčů: {{ players }}, W: {{ gameContainerWidth }} H: {{ gameContainerHeight }}
@@ -26,6 +29,9 @@ import {game} from "stores/game";
 import {user} from "stores/user";
 import elementsEnum from "components/game/elementsEnum";
 import imagesEnum from "src/imagesEnum";
+import cardMoves from "components/game/cardMoves";
+import utils from "components/game/utils";
+
 
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
@@ -42,16 +48,29 @@ export default defineComponent({
     renderer: null,
     scene: null,
     tableEdges: 4,
+    materials: {
+      cardFrame: {
+        primary: null,
+        secondary: null,
+      },
+      cardBack: null,
+      table: null,
+      sky: null,
+      grass: null,
+    },
     cameraView: {
       PLAYER: 'player',
       TABLE: 'table'
     },
 
     // Proměnné pro hru
+    loading: false,
+    gameCards: [],
     drawPileObject: null,
     discardPileObject: null,
     playerSelectObject: null,
-
+    timeouts: [],
+    fetchPromises: [],
   }),
 
   computed: {
@@ -70,13 +89,62 @@ export default defineComponent({
   methods: {
 
     // Spuštění hry
-    startGame() {
-
-      // Pokud je stisknut start během aktivní hry, je nutno resetovat scénu
-      if (game().isGameActive) this.resetScene()
-
+    async startGame() {
+      this.loading = true
       // Během přípravy hry nemůže hráč hrát
       game().userActionDisabled = true
+
+      // TODO dát možnost zmněy nastavení aplikace na frontu
+      const data = {
+        settingsId: 1,
+        userIds: [1, 2],
+        cardGroupId: 1
+      }
+
+      // Vytvoření materiálů pro karty a vytvoření karet
+      this.materials.cardFrame.primary = Cards.createColoredMaterial('#000000')
+      this.materials.cardFrame.secondary = Cards.createColoredMaterial('#fb8d3c')
+      this.materials.cardBack = Cards.createFromUrlMaterial(imagesEnum.CARD_BACK.path)
+
+      const gameCards = []
+
+      // Načítání karet s možností zrušení požadavku
+      let id = Date.now()
+      let controls = {cancel: null, id: id}
+      let fetchPromise = this.$get('prsi/all_cards', {groupId: 1}, false, controls)
+      this.fetchPromises.push(controls)
+      const allCards = await fetchPromise
+      this.fetchPromises = this.fetchPromises.filter(c => c.id !== id)
+
+      if (allCards === null) return
+      allCards.forEach(c => {
+        gameCards.push(
+          Cards.createCardFromMaterials(
+            1,
+            elementsEnum.CARD,
+            Cards.createTexturedMaterial(c.face),
+            this.materials.cardBack,
+            this.materials.cardFrame,
+            {cardId: c.id}
+          )
+        )
+        delete c.face
+      })
+
+      id = Date.now()
+      controls = {cancel: null, id: id}
+      fetchPromise = await this.$post('prsi', data, false, controls)
+      this.fetchPromises.push(controls)
+      const startParams = await fetchPromise
+      this.fetchPromises = this.fetchPromises.filter(c => c.id !== id)
+
+
+
+      // sařazení karet dle toho jak bylo určeno na serveru
+      const orderIndex = new Map(startParams.drawPile.map((value, index) => [value, index]));
+      gameCards.sort((a, b) => orderIndex.get(a.params.cardId) - orderIndex.get(b.params.cardId));
+      this.gameCards = gameCards
+
 
       // TODO zrušit?
       // Metoda pro určeníé celého jména hráče
@@ -84,6 +152,7 @@ export default defineComponent({
         const name = user.firstname + `${user.firstname && user.surname ? ' ' : ''}` + user.surname
         return name ? name + ` (${user.login})` : user.login
       }
+
 
       //TODO upraviot na načítnání ze serveru
       const playersList = game().players
@@ -94,15 +163,12 @@ export default defineComponent({
         player.name = index === 0 ? playerName(user()) : 'počítač ' + index
         player.main = index === 0
         player.angle = angel * index + Math.PI / 2
-        player.point = this.vector(
+        player.point = utils.vector(
           angel * index + Math.PI / 2,
           Scene.tableConfig.radius * (countOfPlayers === 2 || countOfPlayers === 4 ? 0.75 : (countOfPlayers === 5 ? 0.85 : 0.9))
         )
         player.cardInHand = []
       })
-
-      // TODO je třeba?
-      this.changeCameraView()
 
 
       // TODO musí chodit z backendu
@@ -116,9 +182,14 @@ export default defineComponent({
         params: {selectable: true},
       }));
 
+      return
+
       // Přidání balíčku karet
       this.createDrawPile(game().initialSettings.drawPilePosition.x, game().initialSettings.drawPilePosition.z)
 
+      this.loading = false
+
+      console.log('před rozdáním')
       // Rozdání karet
       this.dealCards(game().players, game().initialSettings.cardsPerPlayer)
         .then(() => {
@@ -131,14 +202,16 @@ export default defineComponent({
     // Rozdávání karet z balíčku jednotlivým hráčů
     async dealCards(players, cardsPerPlayer) {
       const promises = []
-      game().players.forEach((player, j) => {
+      players.forEach((player, j) => {
         for (let i = 0; i < cardsPerPlayer; i++) {
+
           // Vytvoření Promise pro každé volání setTimeout
           const promise = new Promise(resolve => {
-            setTimeout(() => {
+            const timeout = setTimeout(() => {
               this.getDrawPileCard(player).then(() => resolve())
-            }, 750 * i + j * 400);
-          });
+            }, 750 * i + j * 400)
+            this.timeouts.push(timeout)
+          })
           promises.push(promise)
         }
       });
@@ -199,146 +272,12 @@ export default defineComponent({
     },
 
 //<editor-fold desc="Metody pro pohyby karet">
-    // Zvedání karty
-    async moveCardVertically(card, stepSize = game().animate.stepSize, finalLevel = Scene.tableConfig.height + 150) {
-      const direction = Math.sign(finalLevel - card.position.y)
-      if (!stepSize) stepSize = game().animate.stepSize
-      stepSize *= game().speed
-      return new Promise((resolve) => {
-        const animate = () => {
-          if (Math.abs(card.position.y - finalLevel) <= stepSize) {
-            card.position.y = finalLevel
-            resolve(true)
-            return
-          }
-          card.position.y += direction * stepSize
-          requestAnimationFrame(animate)
-        }
-        animate()
-      })
-    },
 
-    // Pophyb karty dle směru a vzálenosti
-    async moveCard(card, distance = 100, direction = Math.PI, stepSize = game().animate.stepSize,) {
-      stepSize *= game().speed
-      let position = 0
-      const vector = this.vector(direction, stepSize)
-      return new Promise((resolve) => {
-        const animate = () => {
-          if (distance - position <= stepSize) {
-            resolve(true)
-            return
-          }
-          card.position.x += vector.x
-          card.position.z += vector.z
-          position += stepSize
-
-          requestAnimationFrame(animate)
-        }
-        animate()
-      })
-    },
-
-    // Pophyb karty do pozice s možností natočení karty
-    async moveCardTo(card, destination = {x: 0, z: 0}, targetAngleZ = null, stepSize = game().animate.stepSize,) {
-      destination.x = this.round(destination.x)
-      destination.z = this.round(destination.z)
-      stepSize *= game().speed
-      const cardPosi = card.position
-      let position = 0
-      const direction = Math.atan2(destination.z - cardPosi.z, destination.x - cardPosi.x)
-      const vector = this.vector(direction, stepSize)
-      const distance = this.distance(cardPosi.x, destination.x, cardPosi.z, destination.z)
-      return new Promise((resolve) => {
-        const animate = () => {
-          if (distance - position <= stepSize) {
-            card.position.x = this.round(destination.x)
-            card.position.z = this.round(destination.z)
-            resolve(true)
-            return
-          }
-
-          // Posunutí ve směru trasnslace
-          card.position.x += vector.x
-          card.position.z += vector.z
-
-          // Pokud je definován cílový úhel natočení ve směru z
-          if (targetAngleZ !== null && Math.abs(card.rotation.z - targetAngleZ) <= game().animate.angleSize) {
-            card.rotation.z = targetAngleZ
-            targetAngleZ = null
-          } else if (targetAngleZ !== null) {
-            card.rotation.z += game().animate.angleSize
-          }
-
-          position += stepSize
-          requestAnimationFrame(animate)
-        }
-        animate()
-      })
-    },
-
-    // Otočení karty na specifiický úhel v určité ose
-    async rotateCardTo(card, targetAngleX = null, targetAngleY = null, targetAngleZ = null) {
-      const angleStep = game().animate.angleSize * game().speed
-      const signX = Math.sign(1 / targetAngleX)
-      const signZ = Math.sign(1 / targetAngleZ)
-      const signY = Math.sign(1 / targetAngleY)
-      new Promise((resolve, reject) => {
-        const animate = () => {
-          if (targetAngleX != null && Math.abs(targetAngleX - card.rotation.x) <= angleStep) {
-            card.rotation.x += angleStep * signX
-          } else if (targetAngleX != null) {
-            card.rotation.x = targetAngleX
-            targetAngleX = null
-          }
-          if (targetAngleY != null && Math.abs(targetAngleY - card.rotation.y) <= angleStep) {
-            card.rotation.y += angleStep * signY
-          } else if (targetAngleY != null) {
-            card.rotation.y = targetAngleY
-            targetAngleY = null
-          }
-          if (targetAngleZ != null && Math.abs(targetAngleZ - card.rotation.z) <= angleStep) {
-            card.rotation.z += angleStep * signZ
-          } else if (targetAngleZ != null) {
-            card.rotation.z = targetAngleZ
-            targetAngleZ = null
-          }
-          if (targetAngleX === null && targetAngleY === null && targetAngleZ === null) {
-            resolve(true)
-            return
-          }
-          requestAnimationFrame(animate)
-        }
-        animate()
-      })
-    },
-
-    // Otočení karty o úhel v ose
-    async rotateCardBy(card, angleX = null, angleY = null, angleZ = null) {
-      const angleStep = game().animate.angleSize * game().speed
-      const stepsX = !angleX ? null : Math.abs(Math.ceil(angleX / angleStep))
-      const stepsY = !angleY ? null : Math.abs(Math.ceil(angleY / angleStep))
-      const stepsZ = !angleZ ? null : Math.abs(Math.ceil(angleZ / angleStep))
-      let counter = 0
-      new Promise((resolve, reject) => {
-        const animate = () => {
-          if (stepsX && stepsX > counter) card.rotateX(angleX / stepsX)
-          if (stepsY && stepsY > counter) card.rotateY(angleY / stepsY)
-          if (stepsZ && stepsZ > counter) card.rotateZ(angleZ / stepsZ)
-          if (Math.max(stepsX, stepsZ, stepsY) === counter) {
-            resolve(true)
-            return
-          }
-          counter++
-          requestAnimationFrame(animate)
-        }
-        animate()
-      })
-    },
 
     async addCardToHand(card, targetAngleX = game().animate.cardAngleView) {
       const steps = Math.abs(Math.ceil(targetAngleX / (game().animate.angleSize * game().speed)))
       let counter = 0
+      let animationFrameId = null
       return new Promise((resolve) => {
         const animate = async () => {
           if (counter < steps) {
@@ -377,19 +316,35 @@ export default defineComponent({
 
               // Směr
               const direction = inlineCardCount % 2 === 0 ? player.angle - Math.PI / 2 : player.angle + Math.PI / 2
-              const vector = this.vector(direction, (Cards.config.width * 2 + 10) * Math.floor(inlineCardCount / 2))
+              const vector = utils.vector(direction, (Cards.config.width * 2 + 10) * Math.floor(inlineCardCount / 2))
               vector.x += position.x
               vector.z += position.z
-              await this.moveCardTo(card, vector)
+              if (!await cardMoves.moveCardTo(card, vector)) {
+                resolve(false)
+                return
+              }
             }
-            await this.moveCardVertically(card, null, Scene.tableConfig.height - distanceCoef * Cards.config.height)
-            await this.moveCard(card, Cards.config.height * Math.abs(distanceCoef), Math.sign(distanceCoef) * player.angle)
+            if (!await cardMoves.moveCardVertically(card, null, Scene.tableConfig.height - distanceCoef * Cards.config.height)) {
+              resolve(false)
+              return
+            }
+
+            if (!await cardMoves.moveCard(card, Cards.config.height * Math.abs(distanceCoef), Math.sign(distanceCoef) * player.angle)) {
+              resolve(false)
+              return
+            }
 
             resolve(true)
             return
           }
 
-          requestAnimationFrame(animate)
+
+          if (!game().isGameActive) {
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            resolve(false);
+            return;
+          }
+          animationFrameId = requestAnimationFrame(animate)
         }
         animate()
       })
@@ -423,8 +378,8 @@ export default defineComponent({
       card.params.playerId = null
 
       const rearrangePlayersCard = async () => {
-        await this.moveCardVertically(repositionedCard, undefined, originalPosition.y)
-        await this.moveCardTo(repositionedCard, {x: originalPosition.x, z: originalPosition.z})
+        await cardMoves.moveCardVertically(repositionedCard, undefined, originalPosition.y)
+        await cardMoves.moveCardTo(repositionedCard, {x: originalPosition.x, z: originalPosition.z})
       }
 
       // // Zobrazení obrázku na kartě
@@ -432,17 +387,17 @@ export default defineComponent({
 
       // Odhození karty
       return new Promise(async (resolve) => {
-        await this.moveCardVertically(card)
+        await cardMoves.moveCardVertically(card)
         if (!isLast) rearrangePlayersCard().then(() => game().userActionDisabled = false)
         else game().userActionDisabled = false
-        await this.rotateCardBy(card, Math.PI / 2 + game().animate.cardAngleView);
-        await this.moveCardTo(card, destination)
+        await cardMoves.rotateCardBy(card, Math.PI / 2 + game().animate.cardAngleView);
+        await cardMoves.moveCardTo(card, destination)
 
-        // await this.rotateCardTo(card, -Math.PI / 2, 0, 1)
-        const randZ = this.round(Math.random() * 2 * Math.PI)
-        await this.rotateCardTo(card, -Math.PI / 2, 0, randZ)
+        // await cardMoves.rotateCardTo(card, -Math.PI / 2, 0, 1)
+        const randZ = utils.round(Math.random() * 2 * Math.PI)
+        await cardMoves.rotateCardTo(card, -Math.PI / 2, 0, randZ)
 
-        await this.moveCardVertically(card, undefined, targetHeight)
+        await cardMoves.moveCardVertically(card, undefined, targetHeight)
         card.params.selectable = true
         resolve(true)
       })
@@ -450,7 +405,7 @@ export default defineComponent({
 
     // Přensun karty z balíčku hráči do ruky
     async getDrawPileCard(player) {
-
+      if (!game().isGameActive) return
       // const picture = null // TODO vzít poslední z balíčku
       const drawPileCardsSize = game().drawPileCards.length
       if (!drawPileCardsSize) return
@@ -483,10 +438,10 @@ export default defineComponent({
       this.createDrawPile(pilePosition.x, pilePosition.z)
 
       // Zvednutí karty z balíčku
-      await this.moveCardVertically(newCard)
+      if (!await cardMoves.moveCardVertically(newCard)) return
 
       // Posunutí kart směrem k hráči na vstupní bod hráče
-      await this.moveCardTo(newCard, player.point, -Math.PI / 2 + player.angle)
+      if (!await cardMoves.moveCardTo(newCard, player.point, -Math.PI / 2 + player.angle)) return
 
       //Vložení karty do ruky
       await this.addCardToHand(newCard)
@@ -495,23 +450,7 @@ export default defineComponent({
     //</editor-fold>
 
 //<editor-fold desc="Výpočty">
-    // Pouze v rovine x,z
-    vector(direction, radius) {
-      return {
-        x: this.round(Math.cos(direction) * radius),
-        z: this.round(Math.sin(direction) * radius),
-      }
-    },
 
-    distance(x1, x2, y1, y2) {
-      return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
-    },
-
-    round(number, digits = 10) {
-      number = Number(number)
-      if (isNaN(number)) return null
-      return Math.round(number * 10 ** digits) / 10 ** digits
-    },
     //</editor-fold>
 
 //<editor-fold desc="Listenery">
@@ -546,12 +485,28 @@ export default defineComponent({
       removedElements.forEach(a => {
         scene.remove(a)
       })
-      const table = Scene.createTable(this.tableEdges)
+      const table = Scene.createTable(this.tableEdges, this.materials.table)
       if (table) this.scene.add(table)
+    },
+
+    resetGame() {
+      this.resetScene()
+      game().userActionDisabled = false
+      this.loading = false
+      this.timeouts.forEach(clearTimeout);
+      this.fetchPromises.forEach(p => {
+        console.log(p)
+        console.log(p && p.cancel)
+        if (p.cancel) p.cancel()
+      })
+
     },
 
     // Inicializace herního světa
     initWebGL() {
+
+      // Načtení materiálů pro scénu
+      this.materials.table = Scene.createTableMaterial()
 
       // Parametry kontejneru a renderer
       const container = this.$refs.gameContainer
@@ -564,8 +519,6 @@ export default defineComponent({
       // Přidání kamery
       const camera = new THREE.PerspectiveCamera(75, width / height, 1, 10000)
       camera.lookAt(0, Scene.tableConfig.height + Cards.config.height * 3, 0)
-      // camera.position.set(0, 1200, 1500);
-      // camera.lookAt(0, Scene.tableConfig.height - 50, 0)
 
       // Přidání možnosti hýbat kamerou
       const controls = Controls.add(camera, renderer)
@@ -574,7 +527,7 @@ export default defineComponent({
       const scene = Scene.create()
 
       // Přidání stolu
-      const table = Scene.createTable(this.tableEdges)
+      const table = Scene.createTable(this.tableEdges, this.materials.table)
       if (table) scene.add(table)
 
 
@@ -600,10 +553,7 @@ export default defineComponent({
     },
 
     changeCameraView(newView) {
-      console.log('changeCameraView(newView)')
-      console.log(JSON.stringify(newView))
       if (!newView) newView = game().cameraView
-
       const camera = this.camera
       const cameraView = this.cameraView
       const playerPoint = game().players.find(p => p.main)?.point || {x: 0, z: Scene.tableConfig.radius}
@@ -620,10 +570,6 @@ export default defineComponent({
           camera.position.set(0, playerPoint.z * 2.5, 0);
           break;
       }
-
-
-      console.log('playerPoint.z: ' + playerPoint.z       )
-
       game().cameraView = newView
     },
 
@@ -635,6 +581,7 @@ export default defineComponent({
       this.setTableEdges()
       this.resetScene()
     },
+
 
     handleChangeWindowSize() {
       // Načtení aktuálních rozměrů
@@ -750,6 +697,9 @@ export default defineComponent({
     },
     isGameActive() {
       if (this.isGameActive) this.startGame()
+      else {
+        this.resetGame()
+      }
     },
   }
 })
@@ -759,7 +709,8 @@ export default defineComponent({
 <style scoped>
 .game-page {
   border: 4px solid red;
-  overflow: hidden
+  overflow: hidden;
+  position: relative;
 }
 
 .game-container {
@@ -770,4 +721,22 @@ export default defineComponent({
 .game-toolbar {
   border: 3px solid blue;
 }
+
+.overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5); /* Poloprůhledné černé pozadí */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.overlay-text {
+  color: white;
+  font-size: 20px;
+}
+
 </style>

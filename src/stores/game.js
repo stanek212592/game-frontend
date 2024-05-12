@@ -39,8 +39,14 @@ export const game = defineStore('game', {
   actions: {
     setPlayers(count = 2) {
       const list = []
-      for (let i = 0; i < count; i++) list.push({id: null, name: '', cardInHand: [],})
+      for (let i = 0; i < count; i++)
+        list.push(
+          {id: null, name: '', cardInHand: [], main: false, angle: null, point: {x: 0, z: 0},},
+        )
       this.players = list
     },
+    resetPlayers(){
+      this.setPlayers(2)
+    }
   },
 });

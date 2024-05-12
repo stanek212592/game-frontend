@@ -6,21 +6,19 @@ export const user = defineStore('user', {
     login: '',
     firstname: '',
     surname: '',
-    jwt: '',
+    token: '',
     jwtDt: null,
   }),
   // getters: {
   //   doubleCount: (state) => state.counter * 2,
   // },
   actions: {
-    setJwt(user = null) {
+    setUser(user = null) {
       if (user === null) appSetting().menuSelectedItem = ''
       this.login = user?.login || null
       this.firstname = user?.firstname || null
       this.surname = user?.surname || null
-      this.jwt = user?.token || null
-      this.jwtDt = null
-      // this.jwtDt = user ? new Date() : null
+      this.token = user?.token || null
     },
   },
 });
