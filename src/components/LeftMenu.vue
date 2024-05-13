@@ -21,14 +21,15 @@
           <q-btn v-if="!gameIsActive" style="margin: auto;" color="secondary" :label="$t('hra_nova')"
                  @click="gameIsActive = true"/>
           <template v-else>
-<!--            <q-btn style="margin: auto;" color="secondary" :label="$t('hra_stop')"-->
-<!--                   @click="gameIsActive = false"/>-->
-<!--            <div style="height: 5px;"/>-->
+            <!--            <q-btn style="margin: auto;" color="secondary" :label="$t('hra_stop')"-->
+            <!--                   @click="gameIsActive = false"/>-->
+            <!--            <div style="height: 5px;"/>-->
             <q-btn style="margin: auto;" color="secondary" :label="$t('hra_stop')"
                    @click="gameIsActive = false"/>
           </template>
         </div>
       </template>
+      {{ game }}
 
 
       <!--            <template v-if="selected">-->
@@ -73,7 +74,7 @@ export default {
 
   computed: {
     players() {
-      return game().players.length
+      return game().players.length || 2
     },
     gameIsActive: {
       get() {
@@ -82,12 +83,17 @@ export default {
       set(val) {
         game().isGameActive = val
       }
-
+    },
+    game() {
+      return {
+        players: game().players.length,
+        drawPileCards: game().drawPileCards.map(a=>a.params.cardId),
+        discardPileCards: game().discardPileCards
+      }
     }
   },
 
   methods: {
-    game,
     appSetting,
     handleClickTitle(val) {
       this.$router.push({path: '/game'})

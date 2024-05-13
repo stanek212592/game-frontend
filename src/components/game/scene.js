@@ -2,6 +2,7 @@ import * as THREE from "three";
 import images from "src/imagesEnum";
 import elementsEnum from "components/game/elementsEnum";
 import appConfig from "app/appConfig";
+import {game} from "stores/game";
 
 // Rozměry stolu
 const tableConfig = appConfig.tableSize // {height: 300, radius: 750}
@@ -62,12 +63,11 @@ function createTableMaterial() {
 
 }
 
-function createTable(countEdges = 2,tableMaterial) {
+function createTable(tableMaterial) {
   if (!tableMaterial) tableMaterial = createTableMaterial()
 
-  // Kontrola, že vstupem je číslo a není menší než 4
-  countEdges = Math.floor(Number(countEdges))
-  if (isNaN(countEdges) || countEdges < 4) return null
+  const players = game().players.length
+  const countEdges = players < 4 ? Math.max(players * 2, 4) : players
 
   const
     configDepth = tableConfig.radius / 20,

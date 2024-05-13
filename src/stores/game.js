@@ -4,33 +4,19 @@ import appConfig from "app/appConfig";
 
 export const game = defineStore('game', {
   state: () => ({
-    // Dva hráče jsou výchozí stav
-    players: [
-      {id: null, name: '', cardInHand: [], main: false, angle: null, point: {x: 0, z: 0},},
-      {id: null, name: '', cardInHand: [], main: false, angle: null, point: {x: 0, z: 0},},
-    ],
-    // drawPileCards: 0,
-    drawPileCards: [{id: null, picture: null, params: {}}],
+    // Aktuální stav hry
+    players: [],
+    drawPileCards: [],
     discardPileCards: [],
+    discardPileParams: {},
     isGameActive: false,
     userActionDisabled: false,
+
+
+    // Parametry ovlivňující hru
+    cameraView: null,
     speed: appConfig.animate.speed,
     animate: appConfig.animate,
-    //   {
-    //   stepSize: 8,
-    //   angleSize: Math.PI / 20,
-    //   maxCardsPerRow: 13,
-    //   cardOverlap: 1.3,
-    //   cardAngleView: -Math.PI / 2 - 0.8
-    //
-    // },
-    cameraView: null,
-    initialSettings: Object.freeze({
-      cardCount: 32,
-      cardsPerPlayer: 5,
-      drawPilePosition: {x: 100, z: 0},
-      discardPilePosition: {x: -100, z: 0},
-    })
 
   }),
   // getters: {
@@ -41,11 +27,11 @@ export const game = defineStore('game', {
       const list = []
       for (let i = 0; i < count; i++)
         list.push(
-          {id: null, name: '', cardInHand: [], main: false, angle: null, point: {x: 0, z: 0},},
+          {id: null, name: '', cardInHand: [], main: false, angle: null, point: {x: 0, z: 0}, avatar: null,},
         )
       this.players = list
     },
-    resetPlayers(){
+    resetPlayers() {
       this.setPlayers(2)
     }
   },

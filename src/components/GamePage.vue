@@ -26,7 +26,6 @@ import Scene from "components/game/scene"
 import Cards from "components/game/cards"
 import Controls from "components/game/controls"
 import {game} from "stores/game";
-import {user} from "stores/user";
 import elementsEnum from "components/game/elementsEnum";
 import imagesEnum from "src/imagesEnum";
 import cardMoves from "components/game/cardMoves";
@@ -47,7 +46,8 @@ export default defineComponent({
     camera: null,
     renderer: null,
     scene: null,
-    tableEdges: 4,
+    drawPileObject: null,
+
     materials: {
       cardFrame: {
         primary: null,
@@ -58,6 +58,7 @@ export default defineComponent({
       sky: null,
       grass: null,
     },
+
     cameraView: {
       PLAYER: 'player',
       TABLE: 'table'
@@ -65,10 +66,9 @@ export default defineComponent({
 
     // Proměnné pro hru
     loading: false,
-    gameCards: [],
-    drawPileObject: null,
-    discardPileObject: null,
     playerSelectObject: null,
+
+    // Pomocné proměnné pro možnost zrušení probíhající hry
     timeouts: [],
     fetchPromises: [],
   }),
@@ -106,96 +106,55 @@ export default defineComponent({
       this.materials.cardFrame.secondary = Cards.createColoredMaterial('#fb8d3c')
       this.materials.cardBack = Cards.createFromUrlMaterial(imagesEnum.CARD_BACK.path)
 
-      const gameCards = []
+      // Načtení karet pro hru a výchozích parametrů hry
+      const gameCards = await this.getDrawCardPileFromServer(data.cardGroupId)
+      const startParams = await this.getStartParamsFromServer(data)
 
-      // Načítání karet s možností zrušení požadavku
-      let id = Date.now()
-      let controls = {cancel: null, id: id}
-      let fetchPromise = this.$get('prsi/all_cards', {groupId: 1}, false, controls)
-      this.fetchPromises.push(controls)
-      const allCards = await fetchPromise
-      this.fetchPromises = this.fetchPromises.filter(c => c.id !== id)
-
-      if (allCards === null) return
-      allCards.forEach(c => {
-        gameCards.push(
-          Cards.createCardFromMaterials(
-            1,
-            elementsEnum.CARD,
-            Cards.createTexturedMaterial(c.face),
-            this.materials.cardBack,
-            this.materials.cardFrame,
-            {cardId: c.id}
-          )
-        )
-        delete c.face
-      })
-
-      id = Date.now()
-      controls = {cancel: null, id: id}
-      fetchPromise = await this.$post('prsi', data, false, controls)
-      this.fetchPromises.push(controls)
-      const startParams = await fetchPromise
-      this.fetchPromises = this.fetchPromises.filter(c => c.id !== id)
-
-
-
-      // sařazení karet dle toho jak bylo určeno na serveru
+      // sařazení karet dle toho jak bylo určeno na serveru a vložit do dobíracího balíčku
       const orderIndex = new Map(startParams.drawPile.map((value, index) => [value, index]));
       gameCards.sort((a, b) => orderIndex.get(a.params.cardId) - orderIndex.get(b.params.cardId));
-      this.gameCards = gameCards
+      game().drawPileCards = gameCards
 
-
-      // TODO zrušit?
-      // Metoda pro určeníé celého jména hráče
+      // Metoda pro určení celého jména hráče
       const playerName = (user) => {
         const name = user.firstname + `${user.firstname && user.surname ? ' ' : ''}` + user.surname
         return name ? name + ` (${user.login})` : user.login
       }
 
+      // Nastavení hráčů
+      // Hlavní hráč bude mít vždy index 0, řešeno na backu
+      const players = startParams.players
+      game().setPlayers(players.length)
+      game().players.forEach((p, i) => {
+        const player = players[i]
+        p.id = player.userId
+        p.main = i === 0
+        p.avatar = player.avatar
+        p.name = playerName(player)
+        p.cardInHand = player.cardIds
+        p.virtual = player.virtual
+      })
 
-      //TODO upraviot na načítnání ze serveru
-      const playersList = game().players
-      const countOfPlayers = game().players.length
-      const angel = 2 * Math.PI / countOfPlayers
-      playersList.forEach((player, index) => {
-        player.id = index
-        player.name = index === 0 ? playerName(user()) : 'počítač ' + index
-        player.main = index === 0
-        player.angle = angel * index + Math.PI / 2
-        player.point = utils.vector(
-          angel * index + Math.PI / 2,
-          Scene.tableConfig.radius * (countOfPlayers === 2 || countOfPlayers === 4 ? 0.75 : (countOfPlayers === 5 ? 0.85 : 0.9))
-        )
-        player.cardInHand = []
+      console.log(game().players)
+
+      // Přidání balíčku karet
+      this.createDrawPile(game().animate.drawPilePosition.x, game().animate.drawPilePosition.z)
+
+      this.loading = false
+      console.log('před rozdáním')
+
+      // Vykonání tahů dle backendu
+      startParams.movesList.forEach(move=>{
+        console.log(move)
       })
 
 
-      // TODO musí chodit z backendu
-      // Generátor karet
-      game().drawPileCards = []
-      this.discardPileObject = null
-      const cardsCount = game().initialSettings.cardCount
-      game().drawPileCards = Array.from({length: cardsCount}, (_, i) => ({
-        id: i,
-        picture: imagesEnum.CARDS[Math.floor(Math.random() * 6) + 1],
-        params: {selectable: true},
-      }));
-
-      return
-
-      // Přidání balíčku karet
-      this.createDrawPile(game().initialSettings.drawPilePosition.x, game().initialSettings.drawPilePosition.z)
-
-      this.loading = false
-
-      console.log('před rozdáním')
-      // Rozdání karet
-      this.dealCards(game().players, game().initialSettings.cardsPerPlayer)
-        .then(() => {
-          game().userActionDisabled = false
-          console.log('rozdáno')
-        })
+      // // Rozdání karet
+      // this.dealCards(game().players, game().initialSettings.cardsPerPlayer)
+      //   .then(() => {
+      //     game().userActionDisabled = false
+      //     console.log('rozdáno')
+      //   })
     },
 
 
@@ -219,15 +178,24 @@ export default defineComponent({
     },
 
     // Přidání balíčku karet
-    createDrawPile(x = 0, z = 0) {
+    createDrawPile() {
       const drawPileSize = game().drawPileCards.length
-      const drawPile = Cards.createCard(drawPileSize)
+      const drawPile = Cards.createCardFromMaterials(
+        drawPileSize,
+        elementsEnum.DROW_PILE,
+        this.materials.cardFrame,
+        this.materials.cardBack,
+        this.materials.cardFrame,
+        {selectable: true},
+      )
+
       if (drawPile) {
         drawPile.position.y = Scene.tableConfig.height + (drawPileSize + 1) * Cards.config.depth
-        drawPile.position.x = x
-        drawPile.position.z = z
+        drawPile.position.x = game().animate.drawPilePosition.x
+        drawPile.position.z = game().animate.drawPilePosition.z
         this.scene.add(drawPile)
       }
+
       this.drawPileObject = drawPile
     },
 
@@ -360,7 +328,7 @@ export default defineComponent({
 
       // Určení cílové polohy
       const targetHeight = Scene.tableConfig.height + game().discardPileCards.length * Cards.config.depth * 4
-      const destination = game().initialSettings.discardPilePosition
+      const destination = game().animate.discardPilePosition
       const originalPosition = {...card.position}
 
       // Vložení karty do odhazovacího balíčku
@@ -485,7 +453,7 @@ export default defineComponent({
       removedElements.forEach(a => {
         scene.remove(a)
       })
-      const table = Scene.createTable(this.tableEdges, this.materials.table)
+      const table = Scene.createTable(this.materials.table)
       if (table) this.scene.add(table)
     },
 
@@ -495,8 +463,6 @@ export default defineComponent({
       this.loading = false
       this.timeouts.forEach(clearTimeout);
       this.fetchPromises.forEach(p => {
-        console.log(p)
-        console.log(p && p.cancel)
         if (p.cancel) p.cancel()
       })
 
@@ -527,7 +493,7 @@ export default defineComponent({
       const scene = Scene.create()
 
       // Přidání stolu
-      const table = Scene.createTable(this.tableEdges, this.materials.table)
+      const table = Scene.createTable(this.materials.table)
       if (table) scene.add(table)
 
 
@@ -573,12 +539,7 @@ export default defineComponent({
       game().cameraView = newView
     },
 
-    setTableEdges() {
-      this.tableEdges = this.players < 4 ? Math.max(this.players * 2, 4) : this.players
-    },
-
     handleChangePlayers() {
-      this.setTableEdges()
       this.resetScene()
     },
 
@@ -673,12 +634,48 @@ export default defineComponent({
       this.camera = null
       this.gameContainerWidth = null
       this.gameContainerHeight = null
-    }
+    },
     //</editor-fold>
+    async getDrawCardPileFromServer(cardGroupId) {
+      const gameCards = []
+      // Načítání karet s možností zrušení požadavku
+      let id = Date.now()
+      const controls = {cancel: null, id: id}
+      let fetchPromise = this.$get('prsi/all_cards', {groupId: cardGroupId}, false, controls)
+      this.fetchPromises.push(controls)
+      const allCards = await fetchPromise
+      this.fetchPromises = this.fetchPromises.filter(c => c.id !== id)
+
+      if (allCards === null) return
+      allCards.forEach(c => {
+        gameCards.push(
+          Cards.createCardFromMaterials(
+            1,
+            elementsEnum.CARD,
+            Cards.createTexturedMaterial(c.face),
+            this.materials.cardBack,
+            this.materials.cardFrame,
+            {cardId: c.id, selectable: true},
+          )
+        )
+        delete c.face
+      })
+      return gameCards
+    },
+    async getStartParamsFromServer(data) {
+
+      let id = Date.now()
+      id = Date.now()
+      const controls = {cancel: null, id: id}
+      const fetchPromise = await this.$post('prsi', data, false, controls)
+      this.fetchPromises.push(controls)
+      const startParams = await fetchPromise
+      this.fetchPromises = this.fetchPromises.filter(c => c.id !== id)
+      return startParams
+    }
   },
 
   mounted() {
-    this.setTableEdges()
     this.initWebGL()
     this.addListeners()
   },
