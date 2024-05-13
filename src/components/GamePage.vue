@@ -30,6 +30,7 @@ import elementsEnum from "components/game/elementsEnum";
 import imagesEnum from "src/imagesEnum";
 import cardMoves from "components/game/cardMoves";
 import utils from "components/game/utils";
+import {user} from "stores/user";
 
 
 const raycaster = new THREE.Raycaster();
@@ -124,7 +125,9 @@ export default defineComponent({
       // Nastavení hráčů
       // Hlavní hráč bude mít vždy index 0, řešeno na backu
       const players = startParams.players
-      game().setPlayers(players.length)
+      const countOfPlayers = players.length
+      const angle = 2 * Math.PI / countOfPlayers
+      game().setPlayers(countOfPlayers)
       game().players.forEach((p, i) => {
         const player = players[i]
         p.id = player.userId
@@ -133,6 +136,8 @@ export default defineComponent({
         p.name = playerName(player)
         p.cardInHand = player.cardIds
         p.virtual = player.virtual
+        p.angle = angle * i + Math.PI / 2
+        p.point = this.vector(angle * i + Math.PI / 2)
       })
 
       console.log(game().players)
