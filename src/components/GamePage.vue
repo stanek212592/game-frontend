@@ -31,6 +31,7 @@ import imagesEnum from "src/imagesEnum";
 import cardMoves from "components/game/cardMoves";
 import utils from "components/game/utils";
 import {user} from "stores/user";
+import moveTypesEnum from "components/game/moveTypesEnum";
 
 
 const raycaster = new THREE.Raycaster();
@@ -92,6 +93,7 @@ export default defineComponent({
     // Spuštění hry
     async startGame() {
       this.loading = true
+      this.resetScene()
       // Během přípravy hry nemůže hráč hrát
       game().userActionDisabled = true
 
@@ -108,13 +110,10 @@ export default defineComponent({
       this.materials.cardBack = Cards.createFromUrlMaterial(imagesEnum.CARD_BACK.path)
 
       // Načtení karet pro hru a výchozích parametrů hry
-      const gameCards = await this.getDrawCardPileFromServer(data.cardGroupId)
+      game().gameCards = await this.getDrawCardPileFromServer(data.cardGroupId)
       const startParams = await this.getStartParamsFromServer(data)
 
-      // sařazení karet dle toho jak bylo určeno na serveru a vložit do dobíracího balíčku
-      const orderIndex = new Map(startParams.drawPile.map((value, index) => [value, index]));
-      gameCards.sort((a, b) => orderIndex.get(a.params.cardId) - orderIndex.get(b.params.cardId));
-      game().drawPileCards = gameCards
+      game().drawPileCardsIds = startParams.drawPile
 
       // Metoda pro určení celého jména hráče
       const playerName = (user) => {
@@ -134,13 +133,17 @@ export default defineComponent({
         p.main = i === 0
         p.avatar = player.avatar
         p.name = playerName(player)
-        p.cardInHand = player.cardIds
+        p.cardInHandIds = player.cardIds
         p.virtual = player.virtual
         p.angle = angle * i + Math.PI / 2
-        p.point = this.vector(angle * i + Math.PI / 2)
+        p.point = utils.vector(
+          angle * i + Math.PI / 2,
+          Scene.tableConfig.radius * (countOfPlayers === 2 || countOfPlayers === 4 ? 0.75 : (countOfPlayers === 5 ? 0.85 : 0.9))
+        )
       })
 
-      console.log(game().players)
+
+      // this.changeCameraView()
 
       // Přidání balíčku karet
       this.createDrawPile(game().animate.drawPilePosition.x, game().animate.drawPilePosition.z)
@@ -149,42 +152,47 @@ export default defineComponent({
       console.log('před rozdáním')
 
       // Vykonání tahů dle backendu
-      startParams.movesList.forEach(move=>{
-        console.log(move)
-      })
+
+      for (const move of startParams.movesList) {
+        await new Promise(resolve => {
+          const timeout = setTimeout(() => {
+            this.executeMove(move)
+            resolve()
+          }, 500)
+          this.timeouts.push(timeout)
+        })
+      }
 
 
-      // // Rozdání karet
-      // this.dealCards(game().players, game().initialSettings.cardsPerPlayer)
-      //   .then(() => {
-      //     game().userActionDisabled = false
-      //     console.log('rozdáno')
-      //   })
+      await this.getDrawPileCard(game().players[0])
+      game().userActionDisabled = false
+      console.log('konec')
+
     },
 
+    async executeMove(move) {
 
-    // Rozdávání karet z balíčku jednotlivým hráčů
-    async dealCards(players, cardsPerPlayer) {
-      const promises = []
-      players.forEach((player, j) => {
-        for (let i = 0; i < cardsPerPlayer; i++) {
+      switch (move.type) {
+        case moveTypesEnum.DRAW_TO_DISCARD:
+          console.log('dát kartu z balíčku na stůl')
+          const card = await this.getDrawPileCard(null, true)
+          await this.moveToDiscardPile(card)
+          break
+        case moveTypesEnum.DRAW_TO_PLAYER:
+          console.log('dát kartu z balíčku hráči: ' + move.to)
+          await this.getDrawPileCard(game().players.find(p => p.id === move.to))
+          break
+        case moveTypesEnum.NEXT_PLAYER:
+          console.log('nyní harje hráč ' + move.to)
+          break
+      }
 
-          // Vytvoření Promise pro každé volání setTimeout
-          const promise = new Promise(resolve => {
-            const timeout = setTimeout(() => {
-              this.getDrawPileCard(player).then(() => resolve())
-            }, 750 * i + j * 400)
-            this.timeouts.push(timeout)
-          })
-          promises.push(promise)
-        }
-      });
-      return Promise.all(promises)
     },
+
 
     // Přidání balíčku karet
     createDrawPile() {
-      const drawPileSize = game().drawPileCards.length
+      const drawPileSize = game().drawPileCardsIds.length
       const drawPile = Cards.createCardFromMaterials(
         drawPileSize,
         elementsEnum.DROW_PILE,
@@ -193,7 +201,6 @@ export default defineComponent({
         this.materials.cardFrame,
         {selectable: true},
       )
-
       if (drawPile) {
         drawPile.position.y = Scene.tableConfig.height + (drawPileSize + 1) * Cards.config.depth
         drawPile.position.x = game().animate.drawPilePosition.x
@@ -205,8 +212,10 @@ export default defineComponent({
     },
 
     handleMouseClickOnCard(card) {
+      console.log('click na kartu id: ' + card.params.cardId)
       // Pokud nelze kartu vybrat
       if (!card?.params?.selectable) return
+
 
       // První kliknutí na kartu
       if (!this.playerSelectObject || (this.playerSelectObject && this.playerSelectObject !== card)) {
@@ -216,9 +225,14 @@ export default defineComponent({
         return
       }
 
-      // Pokud klikneme podruhé na stejnou kartu
+      // Pokud klikneme podruhé na stejnou kartu, tak zřušit označení
       this.clearPlayerSelect()
-      if (card.params.playerId != null) this.moveToDiscardPile(card)
+      const cardId = card.params.cardId
+      const player = game().players[0]
+      if (player.cardInHandIds.includes(cardId)) {
+        this.moveToDiscardPile(card, player)
+
+      }
     },
 
     handleMouseClickOnDrawPile(object) {
@@ -247,7 +261,7 @@ export default defineComponent({
 //<editor-fold desc="Metody pro pohyby karet">
 
 
-    async addCardToHand(card, targetAngleX = game().animate.cardAngleView) {
+    async addCardToHand(card, player, targetAngleX = game().animate.cardAngleView) {
       const steps = Math.abs(Math.ceil(targetAngleX / (game().animate.angleSize * game().speed)))
       let counter = 0
       let animationFrameId = null
@@ -257,12 +271,13 @@ export default defineComponent({
             card.rotateX(targetAngleX / steps)
             counter++
           } else {
-            const player = game().players.find(p => p.id === card.params.playerId)
-            player.cardInHand.push(card)
+            // const player = game().players.find(p => p.id === card.params.playerId)
+            // console.log()
+            player.cardInHandIds.push(card.params.cardId)
 
             const maxCardsPerRow = game().animate.maxCardsPerRow
-            let inlineCardCount = (player.cardInHand.length - 1) % maxCardsPerRow + 1
-            let distanceCoef = Math.floor((player.cardInHand.length - 1) / maxCardsPerRow)
+            let inlineCardCount = (player.cardInHandIds.length - 1) % maxCardsPerRow + 1
+            let distanceCoef = Math.floor((player.cardInHandIds.length - 1) / maxCardsPerRow)
 
             switch (distanceCoef) {
               case 0:
@@ -324,31 +339,42 @@ export default defineComponent({
 
     },
 
-    async moveToDiscardPile(card) {
+
+    // Přesunutí karty na odhazovací balíček
+    async moveToDiscardPile(card, player) {
       game().userActionDisabled = true
       card.params.selectable = false
       card.hidePicture(false)
-      // Pokud by náhodou nebyl odhazovací balíček jako pole
-      if (!game().discardPileCards) game().discardPileCards = []
+      const cardId = card.params.cardId
 
       // Určení cílové polohy
-      const targetHeight = Scene.tableConfig.height + game().discardPileCards.length * Cards.config.depth * 4
+      const targetHeight = Scene.tableConfig.height + game().discardPileCardsIds.length * Cards.config.depth * 4
       const destination = game().animate.discardPilePosition
       const originalPosition = {...card.position}
 
+
       // Vložení karty do odhazovacího balíčku
-      game().discardPileCards.push(card)
+      game().discardPileCardsIds.push(cardId)
 
       // Odebrání karty ze seznamu hráčových karet, současně přesunutí karty z poslední pozice
       // na místo vyhozené pro jednodušší řazení karet
-      const player = game().players.find(p => p.id === card.params.playerId)
-      const cardsInHand = player.cardInHand
-      const index = cardsInHand.findIndex(c => c === card)
-      const repositionedCard = cardsInHand[cardsInHand.length - 1]
-      const isLast = index === cardsInHand.length - 1
-      if (!isLast) cardsInHand.splice(index, 1, repositionedCard);
-      cardsInHand.pop()
-      card.params.playerId = null
+      let repositionedCard = null
+      let notRepositioned = true
+      if (player) {
+        // ID karet, které má hráč v ruce
+        const cardInHandIds = player.cardInHandIds
+        // najít index karty, která se bude odebírat
+        const discartdCardIndex = cardInHandIds.findIndex(id => id === cardId)
+        // Pokud se nejedná o index posledního prvku, tak se na místo původní posune nová karta
+        const lastIndex = cardInHandIds.length - 1
+        if (discartdCardIndex !== lastIndex) {
+          repositionedCard = game().gameCards.find(c => c.params.cardId === cardInHandIds[lastIndex])
+          cardInHandIds.splice(discartdCardIndex, 1, repositionedCard.params.cardId);
+          notRepositioned = false
+        }
+        cardInHandIds.pop()
+      }
+
 
       const rearrangePlayersCard = async () => {
         await cardMoves.moveCardVertically(repositionedCard, undefined, originalPosition.y)
@@ -361,12 +387,11 @@ export default defineComponent({
       // Odhození karty
       return new Promise(async (resolve) => {
         await cardMoves.moveCardVertically(card)
-        if (!isLast) rearrangePlayersCard().then(() => game().userActionDisabled = false)
+        if (!notRepositioned) rearrangePlayersCard().then(() => game().userActionDisabled = false)
         else game().userActionDisabled = false
         await cardMoves.rotateCardBy(card, Math.PI / 2 + game().animate.cardAngleView);
         await cardMoves.moveCardTo(card, destination)
 
-        // await cardMoves.rotateCardTo(card, -Math.PI / 2, 0, 1)
         const randZ = utils.round(Math.random() * 2 * Math.PI)
         await cardMoves.rotateCardTo(card, -Math.PI / 2, 0, randZ)
 
@@ -377,47 +402,47 @@ export default defineComponent({
     },
 
     // Přensun karty z balíčku hráči do ruky
-    async getDrawPileCard(player) {
+    async getDrawPileCard(player, onlyPickup) {
       if (!game().isGameActive) return
-      // const picture = null // TODO vzít poslední z balíčku
-      const drawPileCardsSize = game().drawPileCards.length
+
+      const drawPileCardsSize = game().drawPileCardsIds.length
       if (!drawPileCardsSize) return
 
       // Vzít první kartu a odebrat ji z balíčku
-      const card = game().drawPileCards[0]
-
-      card.params.selectable = false
-      game().drawPileCards = game().drawPileCards.slice(1)
-
+      const cardId = game().drawPileCardsIds[0]
+      const newCard = game().gameCards.find(c => c.params.cardId === cardId)
+      game().drawPileCardsIds = game().drawPileCardsIds.slice(1)
+      newCard.params.selectable = false
+      newCard.hidePicture(!player?.main)
 
       const drawPile = this.drawPileObject
       const pilePosition = {
         x: drawPile.position.x,
         z: drawPile.position.z,
       }
-      // Vytvoření nové karty na horní straně balíčku, která se bude posouvat k hráči
-      const newCard = Cards.createCard(1, elementsEnum.CARD, card.picture,
-        {playerId: player.id, cardId: card.id, label: card.picture.label, ...card.params}
-      )
-      if (!player.main) newCard.hidePicture()
+
       newCard.position.y = Scene.tableConfig.height + drawPileCardsSize * 2 * Cards.config.depth // Výšková pozice karty
       newCard.position.x = pilePosition.x
       newCard.position.z = pilePosition.z
       this.scene.add(newCard)
 
       // Virtualizace odebrání karty z balíču
-      // game().drawPileCards--
       this.scene.remove(drawPile)
       this.createDrawPile(pilePosition.x, pilePosition.z)
 
       // Zvednutí karty z balíčku
       if (!await cardMoves.moveCardVertically(newCard)) return
 
+      if (onlyPickup) {
+        newCard.params.selectable = true
+        return newCard
+      }
+
       // Posunutí kart směrem k hráči na vstupní bod hráče
       if (!await cardMoves.moveCardTo(newCard, player.point, -Math.PI / 2 + player.angle)) return
 
-      //Vložení karty do ruky
-      await this.addCardToHand(newCard)
+      // //Vložení karty do ruky
+      await this.addCardToHand(newCard, player)
       newCard.params.selectable = true
     },
     //</editor-fold>
@@ -683,6 +708,8 @@ export default defineComponent({
   mounted() {
     this.initWebGL()
     this.addListeners()
+    game().setPlayers(2)
+    game().isGameActive = false
   },
 
   beforeUnmount() {

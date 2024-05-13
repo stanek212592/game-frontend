@@ -86,9 +86,11 @@ export default {
     },
     game() {
       return {
-        players: game().players.length,
-        drawPileCards: game().drawPileCards.map(a=>a.params.cardId),
-        discardPileCards: game().discardPileCards
+        player1: game().players[0]?.cardInHandIds,
+        player2: game().players[1]?.cardInHandIds,
+        drawPileCards: game().drawPileCardsIds,
+        discardPileCards: game().discardPileCardsIds,
+        userActionDisabled: game().userActionDisabled,
       }
     }
   },

@@ -6,8 +6,9 @@ export const game = defineStore('game', {
   state: () => ({
     // Aktuální stav hry
     players: [],
-    drawPileCards: [],
-    discardPileCards: [],
+    gameCards: [],
+    drawPileCardsIds: [],
+    discardPileCardsIds: [],
     discardPileParams: {},
     isGameActive: false,
     userActionDisabled: false,
@@ -27,7 +28,7 @@ export const game = defineStore('game', {
       const list = []
       for (let i = 0; i < count; i++)
         list.push(
-          {id: null, name: '', cardInHand: [], main: false, angle: null, point: {x: 0, z: 0}, avatar: null,},
+          {id: null, name: '', cardInHandIds: [], main: false, angle: null, point: {x: 0, z: 0}, avatar: null,},
         )
       this.players = list
     },

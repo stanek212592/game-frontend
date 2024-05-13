@@ -1,0 +1,5 @@
+export default Object.freeze({
+  DRAW_TO_DISCARD: 'DRAW_TO_DISCARD',
+  DRAW_TO_PLAYER: 'DRAW_TO_PLAYER',
+  NEXT_PLAYER: 'NEXT_PLAYER',
+})
