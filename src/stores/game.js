@@ -11,6 +11,7 @@ export const game = defineStore('game', {
     discardPileCardsIds: [],
     discardPileParams: {},
     isGameActive: false,
+    activePlayerId: null,
     userActionDisabled: false,
 
 

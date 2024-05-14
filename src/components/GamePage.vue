@@ -5,7 +5,8 @@
     </div>
     <div id="gameContainer" ref="gameContainer" class="game-container"/>
     <div class="game-toolbar">
-      hra: {{ isGameActive }}, hráčů: {{ players }}, W: {{ gameContainerWidth }} H: {{ gameContainerHeight }}
+      hra: {{ isGameActive }}, hráčů: {{ players }}, W: {{ gameContainerWidth }} H: {{ gameContainerHeight }},
+      ativní hráč: {{ activePlayer?.name }}
     </div>
     <div class="fp-column" style="position: absolute; right: 3px;">
       <q-btn style="margin: 3px;" icon="visibility" color="accent" title="Zobrazit pohled hráče"
@@ -84,6 +85,9 @@ export default defineComponent({
     },
     isGameActive() {
       return game().isGameActive
+    },
+    activePlayer() {
+      return game().players.find(p => p.id === game().activePlayerId)
     }
 
   },
@@ -96,6 +100,7 @@ export default defineComponent({
       this.resetScene()
       // Během přípravy hry nemůže hráč hrát
       game().userActionDisabled = true
+      game().activePlayerId = null
 
       // TODO dát možnost zmněy nastavení aplikace na frontu
       const data = {
@@ -171,7 +176,7 @@ export default defineComponent({
     },
 
     async executeMove(move) {
-
+      console.log(move)
       switch (move.type) {
         case moveTypesEnum.DRAW_TO_DISCARD:
           console.log('dát kartu z balíčku na stůl')
@@ -184,7 +189,12 @@ export default defineComponent({
           break
         case moveTypesEnum.NEXT_PLAYER:
           console.log('nyní harje hráč ' + move.to)
+          game().activePlayerId = move.to
+          console.log('pokud aktivní hráč není main, tak volat beckedn')
           break
+      }
+      if (move.discardPileParams != null) {
+        console.log(move.discardPileParams)
       }
 
     },
