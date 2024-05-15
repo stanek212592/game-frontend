@@ -29,25 +29,14 @@
           </template>
         </div>
       </template>
-      {{ game }}
-
-
-      <!--            <template v-if="selected">-->
-      <!--              <div v-for="(item, n) in params" :key="n">-->
-      <!--                <div v-if="item.type === itemTypesEnum.TOGGLE" class="fp-column"-->
-      <!--                     style="padding-left: 10px; padding-right: 10px;">-->
-      <!--                  <div class="width-100" style="text-align: center;">{{ item.label }}</div>-->
-      <!--                  <q-btn-toggle push glossy toggle-color="primary" :options="item.options" spread-->
-      <!--                                v-model="item.value" @update:model-value="val=>handleToggle(val, item)"/>-->
-      <!--                </div>-->
-      <!--                <div v-if="item.type === itemTypesEnum.BUTTON" class="width-100 fp-row" style="padding-top: 10px;">-->
-      <!--                  <q-btn style="margin: auto;" color="secondary" :label="item.label"-->
-      <!--                         @click="store[item.store][item.name] = item.click"-->
-      <!--                  />-->
-      <!--                </div>-->
-      <!--              </div>-->
-      <!--            </template>-->
     </div>
+    <q-item class="fp-column" clickable tag="a" target="_blank" @click="handleClickTitle(titleList[0])">
+      Hra je aktivní: {{ game.isGameActive }} <br>
+      Karet k dobrání: {{ game.cardsToDraw }}<br>
+      Čeká se na server: {{ game.waitingForServer }}<br>
+      <span v-if="game.waitingForServer && game.activePlayerId">Čeká se na hráče: <br>&nbsp;&nbsp;&nbsp;{{ game.players.find(p => p.id === game.activePlayerId)?.name }}</span><br>
+    </q-item>
+
   </q-list>
 </template>
 
@@ -86,11 +75,13 @@ export default {
     },
     game() {
       return {
+        ...game(),
         player1: game().players[0]?.cardInHandIds,
         player2: game().players[1]?.cardInHandIds,
         drawPileCards: game().drawPileCardsIds,
         discardPileCards: game().discardPileCardsIds,
         userActionDisabled: game().userActionDisabled,
+        cardsToDraw: game().pilesRules?.numberOfCardsToDraw,
       }
     }
   },

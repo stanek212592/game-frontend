@@ -1,5 +1,4 @@
 import {defineStore} from 'pinia';
-import Scene from "components/game/scene";
 import appConfig from "app/appConfig";
 
 export const game = defineStore('game', {
@@ -9,10 +8,12 @@ export const game = defineStore('game', {
     gameCards: [],
     drawPileCardsIds: [],
     discardPileCardsIds: [],
-    discardPileParams: {},
+    pilesRules: null,
     isGameActive: false,
     activePlayerId: null,
     userActionDisabled: false,
+    waitingForServer: false,
+    warning: '',
 
 
     // Parametry ovlivňující hru
@@ -35,6 +36,13 @@ export const game = defineStore('game', {
     },
     resetPlayers() {
       this.setPlayers(2)
+    },
+    setWarning(text, time = 2000) {
+      this.warning = text
+      if (time != null)
+        setTimeout(() => {
+          this.warning = ''
+        }, time)
     }
   },
 });

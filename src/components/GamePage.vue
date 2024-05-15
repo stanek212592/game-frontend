@@ -4,9 +4,9 @@
       <span class="overlay-text">Načítání hry</span>
     </div>
     <div id="gameContainer" ref="gameContainer" class="game-container"/>
-    <div class="game-toolbar">
+    <div v-if="showStausBar" class="game-statusbar non-selectable">
       hra: {{ isGameActive }}, hráčů: {{ players }}, W: {{ gameContainerWidth }} H: {{ gameContainerHeight }},
-      ativní hráč: {{ activePlayer?.name }}
+      ativní hráč: {{ activePlayer?.name }}, zakázané akce hráče: {{ actionIsDisabled }}
     </div>
     <div class="fp-column" style="position: absolute; right: 3px;">
       <q-btn style="margin: 3px;" icon="visibility" color="accent" title="Zobrazit pohled hráče"
@@ -14,15 +14,17 @@
       <q-btn style="margin: 3px;" icon="panorama" color="accent" title="Náhled na herní stůl"
              @click="changeCameraView(cameraView.TABLE)"/>
     </div>
+    <div v-if="gameWarning" class="non-selectable width-100 page-warning">
+      {{ gameWarning }}
+    </div>
   </div>
 </template>
 
 <script>
+
 import * as THREE from 'three';
 import {appSetting} from "stores/appSetting";
-
 import {defineComponent} from 'vue'
-
 import Scene from "components/game/scene"
 import Cards from "components/game/cards"
 import Controls from "components/game/controls"
@@ -31,9 +33,7 @@ import elementsEnum from "components/game/elementsEnum";
 import imagesEnum from "src/imagesEnum";
 import cardMoves from "components/game/cardMoves";
 import utils from "components/game/utils";
-import {user} from "stores/user";
 import moveTypesEnum from "components/game/moveTypesEnum";
-
 
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
@@ -80,6 +80,9 @@ export default defineComponent({
     showMenu() {
       return appSetting().showMenu
     },
+    showStausBar() {
+      return process.env.DEV
+    },
     players() {
       return game().players.length
     },
@@ -88,7 +91,13 @@ export default defineComponent({
     },
     activePlayer() {
       return game().players.find(p => p.id === game().activePlayerId)
-    }
+    },
+    actionIsDisabled() {
+      return game().userActionDisabled
+    },
+    gameWarning(){
+      return game().warning
+    },
 
   },
 
@@ -96,11 +105,13 @@ export default defineComponent({
 
     // Spuštění hry
     async startGame() {
+      // Resetování hry
+      this.resetGame()
       this.loading = true
-      this.resetScene()
+
+
       // Během přípravy hry nemůže hráč hrát
       game().userActionDisabled = true
-      game().activePlayerId = null
 
       // TODO dát možnost zmněy nastavení aplikace na frontu
       const data = {
@@ -154,49 +165,100 @@ export default defineComponent({
       this.createDrawPile(game().animate.drawPilePosition.x, game().animate.drawPilePosition.z)
 
       this.loading = false
-      console.log('před rozdáním')
 
       // Vykonání tahů dle backendu
+      const executeMoves = async () => {
+        const promises = startParams.movesList.map((move, index) => {
+          return new Promise(resolve => {
+            const timeout = setTimeout(async () => {
+              await this.executeMove(move);
+              resolve();
+            }, index * 500); // Spustit každých 500 ms
+            this.timeouts.push(timeout);
+          });
+        });
+        await Promise.all(promises);
+      };
 
-      for (const move of startParams.movesList) {
-        await new Promise(resolve => {
-          const timeout = setTimeout(() => {
-            this.executeMove(move)
-            resolve()
-          }, 500)
-          this.timeouts.push(timeout)
-        })
-      }
-
-
-      await this.getDrawPileCard(game().players[0])
+      await executeMoves();
       game().userActionDisabled = false
-      console.log('konec')
-
     },
 
-    async executeMove(move) {
-      console.log(move)
+    async executeMove(move, card, disableUserActions) {
+      if (disableUserActions) game().userActionDisabled = true
       switch (move.type) {
+
+        // Vyložen výchozí barvy - voláno pouze backem
         case moveTypesEnum.DRAW_TO_DISCARD:
-          console.log('dát kartu z balíčku na stůl')
-          const card = await this.getDrawPileCard(null, true)
+          card = await this.getDrawPileCard(null, true)
           await this.moveToDiscardPile(card)
           break
-        case moveTypesEnum.DRAW_TO_PLAYER:
-          console.log('dát kartu z balíčku hráči: ' + move.to)
-          await this.getDrawPileCard(game().players.find(p => p.id === move.to))
-          break
-        case moveTypesEnum.NEXT_PLAYER:
-          console.log('nyní harje hráč ' + move.to)
-          game().activePlayerId = move.to
-          console.log('pokud aktivní hráč není main, tak volat beckedn')
-          break
-      }
-      if (move.discardPileParams != null) {
-        console.log(move.discardPileParams)
-      }
 
+        // Braní karet z balíčku
+        case moveTypesEnum.DRAW_TO_PLAYER:
+
+          // Kartu lze vzít pouze pokud nejsou určeny linity pro balíčky nabo nám to limity dovolují
+          const pilesRules = game().pilesRules
+
+          // Kartu lze vzít pokud nejsou určeny nějaká omezují pravidla
+          if (!pilesRules)
+            await this.getDrawPileCard(this.getPlayer(move.to))
+
+          // Pokud jsou pravidla:
+          else {
+
+            // Pokud je pravidlo, které určuje počet karet a je větší než nula, tak lze vzít kartu
+            if (pilesRules.numberOfCardsToDraw > 0) {
+
+              // snížíme počet karet, které lze ještě vzít
+              pilesRules.numberOfCardsToDraw--
+
+              // Pokud bereme kartu, tak již nebude možné na balíček odhazovat
+              // Smažeme seznam povolených id, které lez dát na odhazovací balíček
+              pilesRules.permittedCardIdsOnDiscardPile = []
+
+              // Přesuneme kartu z dobíracího balíčku hráči do ruky
+              await this.getDrawPileCard(this.getPlayer(move.to))
+
+              // Pokud už nelze vzít karty z balíčku, tak tah konč a vrátíme další tah
+              if (pilesRules.numberOfCardsToDraw === 0)
+                return {type: moveTypesEnum.NEXT_PLAYER, to: game().players[1].id}
+            }
+          }
+          break
+
+        // Odhození karty - main hráč (řešit pravidla), ostatní => řeší se na backu, jen odhodit
+        case moveTypesEnum.CARD_TO_DISCARD:
+          console.log('vyhodit')
+          const player = this.getPlayer(move.from)
+          if (this.getMainPlayer() !== player) await this.moveToDiscardPile(card, player)
+          else {
+            const permitted = game().pilesRules ? game().pilesRules.permittedCardIdsOnDiscardPile : null
+            if (permitted.includes(card.params.cardId)) console.log('lze odhodit')
+            else {
+              console.log('nelze odhodit')
+              game().setWarning('Nepovolený tah')
+            }
+
+
+          }
+          break
+        // Toto slouží pro nastavení herních pravidel na konci tahu počítače
+        // nebo na konci tahu hráče pro odeslání dat na server (čekání na další instrukce)
+        case moveTypesEnum.NEXT_PLAYER:
+          game().activePlayerId = move.to
+          if (this.getMainPlayer()?.id === move.to) {
+            if (move.pilesRules != null) game().pilesRules = move.pilesRules
+          } else {
+            console.log('hraje počítač, volat back')
+            game().waitingForServer = true
+            // volání backu
+            // game().waitingForServer = false
+          }
+          break
+      }
+      if (disableUserActions) game().userActionDisabled = false
+      return null
     },
 
 
@@ -221,8 +283,11 @@ export default defineComponent({
       this.drawPileObject = drawPile
     },
 
-    handleMouseClickOnCard(card) {
-      console.log('click na kartu id: ' + card.params.cardId)
+    async handleMouseClickOnCard(card) {
+      // Pokud main hráč není aktivní, tak návrat
+      const player = game().players[0] // Hřáč u monitoru má vždy index 0
+      if (player.id !== game().activePlayerId) return
+
       // Pokud nelze kartu vybrat
       if (!card?.params?.selectable) return
 
@@ -237,15 +302,20 @@ export default defineComponent({
 
       // Pokud klikneme podruhé na stejnou kartu, tak zřušit označení
       this.clearPlayerSelect()
-      const cardId = card.params.cardId
-      const player = game().players[0]
-      if (player.cardInHandIds.includes(cardId)) {
-        this.moveToDiscardPile(card, player)
 
+      // Pokud tuto kartu drží v ruce hráč tak odhodit předat tah
+      const cardId = card.params.cardId
+      if (player.cardInHandIds.includes(cardId)) {
+        await this.executeMove({type: moveTypesEnum.CARD_TO_DISCARD, from: player.id,}, card, true)
+        // await this.executeMove({type: moveTypesEnum.NEXT_PLAYER, from: player.id, to: game().players[1].id}, null, true)
       }
     },
 
-    handleMouseClickOnDrawPile(object) {
+    async handleMouseClickOnDrawPile(object) {
+      // Pokud main hráč není aktivní, tak návrat
+      const player = game().players[0] // Hřáč u monitoru má vždy index 0
+      if (player.id !== game().activePlayerId) return
+
       // Označení balíčku, pokud již není označený
       if (!this.playerSelectObject || (this.playerSelectObject !== object)) {
         this.clearPlayerSelect()
@@ -256,9 +326,20 @@ export default defineComponent({
 
       // Pro druhé kliknutí na balíček
       this.clearPlayerSelect()
-      const player = game().players.find(p => p.main)
-      this.getDrawPileCard(player)
+      const newMove = await this.executeMove({
+        type: moveTypesEnum.DRAW_TO_PLAYER,
+        to: this.getMainPlayer()?.id
+      })
+      if (newMove)
+        this.executeMove(newMove)
 
+    },
+
+    getPlayer(id) {
+      return game().players.find(p => p.id === id)
+    },
+    getMainPlayer() {
+      return game().players.find(p => p.main)
     },
 
     clearPlayerSelect() {
@@ -281,8 +362,6 @@ export default defineComponent({
             card.rotateX(targetAngleX / steps)
             counter++
           } else {
-            // const player = game().players.find(p => p.id === card.params.playerId)
-            // console.log()
             player.cardInHandIds.push(card.params.cardId)
 
             const maxCardsPerRow = game().animate.maxCardsPerRow
@@ -304,8 +383,6 @@ export default defineComponent({
 
             distanceCoef *= game().animate.cardOverlap
             distanceCoef -= 1
-            // await this.pickCard(card, null, Scene.tableConfig.height - distanceCoef * Cards.config.height)
-
 
             // Srovnání karet pro druhou a každou další
             if (inlineCardCount - 1) {
@@ -326,16 +403,13 @@ export default defineComponent({
               resolve(false)
               return
             }
-
             if (!await cardMoves.moveCard(card, Cards.config.height * Math.abs(distanceCoef), Math.sign(distanceCoef) * player.angle)) {
               resolve(false)
               return
             }
-
             resolve(true)
             return
           }
-
 
           if (!game().isGameActive) {
             if (animationFrameId) cancelAnimationFrame(animationFrameId);
@@ -352,7 +426,6 @@ export default defineComponent({
 
     // Přesunutí karty na odhazovací balíček
     async moveToDiscardPile(card, player) {
-      game().userActionDisabled = true
       card.params.selectable = false
       card.hidePicture(false)
       const cardId = card.params.cardId
@@ -391,14 +464,10 @@ export default defineComponent({
         await cardMoves.moveCardTo(repositionedCard, {x: originalPosition.x, z: originalPosition.z})
       }
 
-      // // Zobrazení obrázku na kartě
-      // const newCard = Cards.createCard(1,)
-
       // Odhození karty
       return new Promise(async (resolve) => {
         await cardMoves.moveCardVertically(card)
-        if (!notRepositioned) rearrangePlayersCard().then(() => game().userActionDisabled = false)
-        else game().userActionDisabled = false
+        if (!notRepositioned) rearrangePlayersCard()
         await cardMoves.rotateCardBy(card, Math.PI / 2 + game().animate.cardAngleView);
         await cardMoves.moveCardTo(card, destination)
 
@@ -500,7 +569,10 @@ export default defineComponent({
     resetGame() {
       this.resetScene()
       game().userActionDisabled = false
+      game().pilesRules = null
+      game().waitingForServer = false
       this.loading = false
+      game().activePlayerId = null
       this.timeouts.forEach(clearTimeout);
       this.fetchPromises.forEach(p => {
         if (p.cancel) p.cancel()
@@ -518,8 +590,10 @@ export default defineComponent({
       const container = this.$refs.gameContainer
       const width = container.clientWidth
       const height = container.clientHeight
-      const renderer = new THREE.WebGLRenderer()
+      const renderer = new THREE.WebGLRenderer({antialias: true})
       renderer.setSize(width, height)
+
+
       container.appendChild(renderer.domElement)
 
       // Přidání kamery
@@ -562,7 +636,7 @@ export default defineComponent({
       if (!newView) newView = game().cameraView
       const camera = this.camera
       const cameraView = this.cameraView
-      const playerPoint = game().players.find(p => p.main)?.point || {x: 0, z: Scene.tableConfig.radius}
+      const playerPoint = this.getMainPlayer()?.point || {x: 0, z: Scene.tableConfig.radius}
       switch (newView) {
         case null:
         case cameraView.PLAYER:
@@ -573,7 +647,7 @@ export default defineComponent({
           );
           break;
         case cameraView.TABLE:
-          camera.position.set(0, playerPoint.z * 2.5, 0);
+          camera.position.set(0, playerPoint.z * 1.3, 0);
           break;
       }
       game().cameraView = newView
@@ -757,7 +831,7 @@ export default defineComponent({
   height: 100vh;
 }
 
-.game-toolbar {
+.game-statusbar {
   border: 3px solid blue;
 }
 
@@ -777,5 +851,14 @@ export default defineComponent({
   color: white;
   font-size: 20px;
 }
+
+.page-warning{
+  position: absolute;
+  text-align: center;
+  font-size: 24pt;
+  font-weight: bold;
+  color: red;
+}
+
 
 </style>
