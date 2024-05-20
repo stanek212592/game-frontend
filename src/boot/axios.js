@@ -19,10 +19,10 @@ const api = axios.create({
 
 api.interceptors.request.use((config) => {
 
- // Přepínání adresa pro vývoj
+  // Přepínání adresa pro vývoj
   if (process.env.DEV) {
     config.baseURL = appSetting().local ? process.env.backendLocal : process.env.backendServer
-    // console.log(config.baseURL)
+    config.timeout = appSetting().local ? 5000 * 60 : 5000
   }
 
   const token = user().token
@@ -52,14 +52,15 @@ const handleExceptions = e => {
 }
 
 // Get dle požadavků aplikace
-const get = async (url, data, lock = false, controls) => {
+const get = async (url, data, lock = false, addResetTokenTo = '') => {
   if (lock) appSetting().lock()
 
   const CancelToken = axios.CancelToken;
   const source = CancelToken.source();
+  const id = Date.now()
 
 
-  const promise =  new Promise((resolve, reject) => {
+  const promise = new Promise((resolve) => {
     api.get(requestUrl(url), {params: data, cancelToken: source.token})
       .then(resp => {
         resolve(resp.data)
@@ -69,25 +70,25 @@ const get = async (url, data, lock = false, controls) => {
         resolve(null)
       })
       .finally(() => {
+        if (addResetTokenTo) removeCancelTokenFromStore(addResetTokenTo, id)
         if (lock) appSetting().unlock()
       })
   })
 
-  if (controls) {
-    controls.cancel = () => source.cancel()
-  }
+  if (addResetTokenTo) addCancelTokenToStore(addResetTokenTo, source, id)
   return promise
 }
 
 
 // Post dle požadavků aplikace
-const post = async (url, data, lock = false, controls) => {
+const post = async (url, data, lock = false, addResetTokenTo = '') => {
   if (lock) appSetting().lock()
 
   const CancelToken = axios.CancelToken;
   const source = CancelToken.source();
+  const id = Date.now()
 
-  const promise =  new Promise((resolve, reject) => {
+  const promise = new Promise((resolve) => {
     api.post(requestUrl(url), data)
       .then(resp => {
         resolve(resp.data)
@@ -95,16 +96,15 @@ const post = async (url, data, lock = false, controls) => {
       .catch(e => {
         handleExceptions(e)
         resolve(null)
-        // reject(e?.response?.status || null)
-
       })
       .finally(() => {
+        if (addResetTokenTo) removeCancelTokenFromStore(addResetTokenTo, id)
         if (lock) appSetting().unlock()
       })
   })
-  if (controls) {
-    controls.cancel = () => source.cancel()
-  }
+
+  if (addResetTokenTo) addCancelTokenToStore(addResetTokenTo, source, id)
+
   return promise
 }
 
@@ -139,4 +139,23 @@ function jwtDecode(token) {
   }).join(''));
 
   return JSON.parse(jsonPayload);
+}
+
+function addCancelTokenToStore(storeName, source, id) {
+  if (typeof storeName !== 'string') return
+  if (!appSetting().axiosRequests) appSetting().axiosRequests = {}
+  const axiosRequests = appSetting().axiosRequests
+  if (!axiosRequests[storeName]) axiosRequests[storeName] = []
+  const store = axiosRequests[storeName]
+  source.id = id
+  store.push(source)
+}
+
+function removeCancelTokenFromStore(storeName, id) {
+  if (typeof storeName !== 'string') return
+  if (!appSetting().axiosRequests) appSetting().axiosRequests = {}
+  const store = appSetting().axiosRequests[storeName] || []
+  const index = appSetting().axiosRequests[storeName]?.findIndex(a => a.id === id)
+  if (index >= 0) store.splice(index, 1)
+
 }

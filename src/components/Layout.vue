@@ -11,7 +11,8 @@
           Prší
           <q-badge transparent align="middle" color="orange">v{{ version }}</q-badge>
 
-          {{ game.isGameActive }}
+          <span style="margin-left: 100px; font-size: 14px;">Stav hry: {{ game.state }}</span>
+
         </q-toolbar-title>
         <template v-if="isDev">
           <span>Server</span>

@@ -1,6 +1,7 @@
 import {game} from "stores/game";
 import Scene from "components/game/scene";
 import utils from "components/game/utils";
+import gameStatesEnum from "components/game/gameStatesEnum";
 
 export default {moveCardVertically, moveCard, rotateCardTo, rotateCardBy, moveCardTo}
 
@@ -19,7 +20,7 @@ async function moveCardVertically(card, stepSize = game().animate.stepSize, fina
       }
       card.position.y += direction * stepSize
 
-      if (!game().isGameActive) {
+      if (game().state === gameStatesEnum.NO_GAME) {
         if (animationFrameId) cancelAnimationFrame(animationFrameId);
         resolve(false);
         return;
@@ -46,7 +47,7 @@ async function moveCard(card, distance = 100, direction = Math.PI, stepSize = ga
       card.position.z += vector.z
       position += stepSize
 
-      if (!game().isGameActive) {
+      if (game().state === gameStatesEnum.NO_GAME) {
         if (animationFrameId) cancelAnimationFrame(animationFrameId);
         resolve(false);
         return;
@@ -64,7 +65,7 @@ async function rotateCardTo(card, targetAngleX = null, targetAngleY = null, targ
   const signZ = Math.sign(1 / targetAngleZ)
   const signY = Math.sign(1 / targetAngleY)
   let animationFrameId = null
-  new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const animate = () => {
       if (targetAngleX != null && Math.abs(targetAngleX - card.rotation.x) <= angleStep) {
         card.rotation.x += angleStep * signX
@@ -88,7 +89,7 @@ async function rotateCardTo(card, targetAngleX = null, targetAngleY = null, targ
         resolve(true)
         return
       }
-      if (!game().isGameActive) {
+      if (game().state === gameStatesEnum.NO_GAME) {
         if (animationFrameId) cancelAnimationFrame(animationFrameId);
         resolve(false);
         return;
@@ -107,7 +108,7 @@ async function rotateCardBy(card, angleX = null, angleY = null, angleZ = null) {
   const stepsZ = !angleZ ? null : Math.abs(Math.ceil(angleZ / angleStep))
   let counter = 0
   let animationFrameId = null
-  new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const animate = () => {
       if (stepsX && stepsX > counter) card.rotateX(angleX / stepsX)
       if (stepsY && stepsY > counter) card.rotateY(angleY / stepsY)
@@ -117,7 +118,7 @@ async function rotateCardBy(card, angleX = null, angleY = null, angleZ = null) {
         return
       }
       counter++
-      if (!game().isGameActive) {
+      if (game().state === gameStatesEnum.NO_GAME) {
         if (animationFrameId) cancelAnimationFrame(animationFrameId);
         resolve(false);
         return;
@@ -161,10 +162,11 @@ async function moveCardTo(card, destination = {x: 0, z: 0}, targetAngleZ = null,
       }
 
       position += stepSize
-      if (!game().isGameActive) {
+      if (game().state === gameStatesEnum.NO_GAME) {
         if (animationFrameId) cancelAnimationFrame(animationFrameId);
         resolve(false);
         return;
+
       }
       animationFrameId = requestAnimationFrame(animate)
     }

@@ -3,6 +3,7 @@ import {appSetting} from "stores/appSetting";
 
 export const user = defineStore('user', {
   state: () => ({
+    id: null,
     login: '',
     firstname: '',
     surname: '',
@@ -15,6 +16,7 @@ export const user = defineStore('user', {
   actions: {
     setUser(user = null) {
       if (user === null) appSetting().menuSelectedItem = ''
+      this.id = user?.id || null
       this.login = user?.login || null
       this.firstname = user?.firstname || null
       this.surname = user?.surname || null

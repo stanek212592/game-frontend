@@ -11,7 +11,6 @@
 import {defineComponent} from 'vue';
 import images from "src/imagesEnum";
 import LoginDialog from "components/LoginDialog.vue";
-import {user} from "stores/user";
 
 export default defineComponent({
   name: 'IndexPage',
@@ -21,8 +20,7 @@ export default defineComponent({
       return images
     },
     showLogin(){
-      return !user()?.login
-      // return !user().login
+      return false
     }
   },
 });
