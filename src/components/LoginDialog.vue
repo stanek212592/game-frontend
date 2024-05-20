@@ -32,7 +32,7 @@
 </template>
 
 <script>
-import sha1 from 'crypto-js/sha1';
+
 import {user as userStore} from "stores/user";
 import {defineComponent} from 'vue'
 
@@ -72,6 +72,7 @@ export default defineComponent({
         .then(resp => {
           if (!resp) return
           userStore().setUser(resp)
+          this.$router.push({path: '/game'})
           this.closeDialog()
         })
     }

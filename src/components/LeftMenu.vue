@@ -10,7 +10,7 @@
           <q-item-label caption>nová hra</q-item-label>
         </q-item-section>
       </q-item>
-      <template v-if="appSetting().menuSelectedItem === titleList[0]">
+      <template v-if="!appSetting().menuSelectedItem || appSetting().menuSelectedItem === titleList[0]">
         <div class="fp-column" style="padding-left: 10px; padding-right: 10px;">
           <div class="width-100" style="text-align: center;">Hráčů</div>
           <q-btn-toggle push glossy toggle-color="primary" :options="playersOptions" spread
@@ -41,12 +41,18 @@
         :title="lastCardOnDiscard.title"/>
     </q-item>
     <q-item class="fp-column">
-      <span>Z balíčku vzít: {{ game.cardsToDraw }}</span>
-      <span>Lze vyhodit: {{ game.rules?.permittedCardIdsOnDiscardPile.length ? 'ANO' : 'NE' }}</span>
-      <span>( {{ game.rules?.permittedCardIdsOnDiscardPile.length }} )</span>
-      <span>active: {{ game.active }} </span>
-
+      <div class="width-100" style="margin-left: 5px; font-weight: bold;">
+        Rychlost animací:
+      </div>
+      <q-slider v-model="gameSpeed" :min="1" :max="60"/>
     </q-item>
+<!--    <q-item class="fp-column">-->
+<!--      <span>Z balíčku vzít: {{ game.cardsToDraw }}</span>-->
+<!--      <span>Lze vyhodit: {{ game.rules?.permittedCardIdsOnDiscardPile.length ? 'ANO' : 'NE' }}</span>-->
+<!--      <span>( {{ game.rules?.permittedCardIdsOnDiscardPile.length }} )</span>-->
+<!--      <span>active: {{ game.active }} </span>-->
+
+<!--    </q-item>-->
 
   </q-list>
 </template>
@@ -72,14 +78,23 @@ export default {
       {label: '5', value: 5},
     ],
     titleList: ['Hra'],
+    // gameSpeed: 50,
   }),
 
   computed: {
+    gameSpeed: {
+      get() {
+        return Math.round(game().speed * 5)
+      },
+      set(val) {
+        game().speed = Math.round(val * 2000) / 10000
+      }
+    },
     players() {
       return game().players.length || 2
     },
-    gameIsActive(){
-        return game().state !== gameStatesEnum.NO_GAME
+    gameIsActive() {
+      return game().state !== gameStatesEnum.NO_GAME
     },
     game() {
       return {
@@ -128,11 +143,11 @@ export default {
 
       game().setPlayers(playerArray)
     },
-    startGame(){
+    startGame() {
       this.handleChangePlayers(this.players)
       game().setGameState(gameStatesEnum.START_GAME)
     },
-    stopGame(){
+    stopGame() {
       game().setGameState(gameStatesEnum.NO_GAME)
     },
     restartGame() {

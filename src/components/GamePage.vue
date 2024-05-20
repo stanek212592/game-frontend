@@ -39,6 +39,7 @@
              style="width: 50px; margin: 4px;"/>
     </div>
     <suit-select-dialog v-model="showSelectSuit" :items="itemsSelectSuits" @select="handleSuitSelect"/>
+    <game-over-dialog v-model="showGameOverDialog" :player-id="winnerId"/>
   </div>
 </template>
 
@@ -61,18 +62,21 @@ import MoveTypesEnum from "components/game/moveTypesEnum";
 import {user} from "stores/user";
 import gameStatesEnum from "components/game/gameStatesEnum";
 import appConfig from "app/appConfig";
+import GameOverDialog from "components/GameOverDialog.vue";
 
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 export default defineComponent({
   name: "GamePage",
-  components: {SuitSelectDialog},
+  components: {GameOverDialog, SuitSelectDialog},
 
   data: () => ({
     suits: [],
     itemsSelectSuits: [],
     showSelectSuit: false,
     computerStopBtn: false,
+    showGameOverDialog: false,
+    winnerId: null,
 
 
     // Parametry herního kontejneru
@@ -213,7 +217,7 @@ export default defineComponent({
           const timeout = setTimeout(async () => {
             await this.executeMove(move);
             resolve();
-          }, index * 500); // Spustit každých 500 ms
+          }, index * 500 / game().speed); // Spustit každých 500 ms
           this.timeouts.push(timeout);
         });
       });
@@ -225,6 +229,7 @@ export default defineComponent({
       switch (move.type) {
         case moveTypesEnum.DRAW_TO_DISCARD: // Vyložen výchozí karty
           card = await this.getDrawPileCard(null, true)
+          // await cardMoves.rotateCardTo(card, -Math.PI / 2, 0, 0)
           const result = await this.moveToDiscardPile(card)
           if (!result) game().setGameState(gameStatesEnum.ERROR)
           return
@@ -249,7 +254,10 @@ export default defineComponent({
               )
             await this.getDrawPileCard(this.getPlayer(move.to)) // Přesuneme kartu z dobíracího balíčku hráči do ruky
             await this.shuffleIfNeeded()
-            if (rules.numberOfCardsToDraw > 0) return
+            if (rules.numberOfCardsToDraw > 0) {
+              if (this.activePlayer === this.mainPlayer) this.executeMove(move)
+              return
+            }
           }
           break
         case moveTypesEnum.PLAYER_TO_DISCARD: // Odhození karty - main hráč (řešit pravidla), ostatní => řeší se na backu, jen odhodit
@@ -279,7 +287,7 @@ export default defineComponent({
             game().setGameState(gameStatesEnum.PLAYER_TURN_PROCESSING)
           } else {
             this.computerStopBtn = true
-            await this.sleep(2000)
+            await this.sleep(1000 / game().speed)
             this.computerStopBtn = false
             game().setGameState(gameStatesEnum.COMPUTER_TURN_PROCESSING, false)
           }
@@ -323,7 +331,7 @@ export default defineComponent({
             await cardMoves.moveCard(randCard, 100, undefined, 15)
             await cardMoves.moveCardVertically(randCard, 15, Scene.tableConfig.height + 150 + cards.length + i)
             await cardMoves.moveCard(randCard, 100, 2 * Math.PI, 15)
-            for (let j = 0; j < cards.length; j++){
+            for (let j = 0; j < cards.length; j++) {
               const randCard = cards[j];
               await cardMoves.moveCardVertically(randCard, 15, Scene.tableConfig.height + 150 + cards.length + j)
             }
@@ -482,7 +490,7 @@ export default defineComponent({
                 return
               }
             }
-            if (!await cardMoves.moveCardVertically(card, null, Scene.tableConfig.height - distanceCoef * Cards.config.height)) {
+            if (!await cardMoves.moveCardVertically(card, undefined, Scene.tableConfig.height - distanceCoef * Cards.config.height)) {
               resolve(false)
               return
             }
@@ -580,8 +588,8 @@ export default defineComponent({
       newCard.params.selectable = false
 
       // TODO přepnout - jen pro dev
-      // newCard.hidePicture(!player?.main)
-      newCard.hidePicture(false)
+      newCard.hidePicture(!player?.main)
+      // newCard.hidePicture(false)
 
 
       const drawPile = this.drawPileObject
@@ -733,12 +741,12 @@ export default defineComponent({
         case cameraView.PLAYER:
           camera.position.set(
             0,
-            Scene.tableConfig.height * 2 + Cards.config.height * 2,
-            playerPoint.z * 1.4 + Cards.config.height * 2,
+            Scene.tableConfig.height * 2 + Cards.config.height * 2.5,
+            playerPoint.z * 1.05 + Cards.config.height * 1.5,
           );
           break;
         case cameraView.TABLE:
-          camera.position.set(0, playerPoint.z * 1.3, 0);
+          camera.position.set(0, playerPoint.z * 1.3, playerPoint.z * 0.5);
           break;
       }
       game().cameraView = newView
@@ -880,6 +888,8 @@ export default defineComponent({
       console.log(move)
       game().activePlayerId = null
       game().setGameState(gameStatesEnum.GAME_OVER)
+      this.showGameOverDialog = true
+      this.winnerId = move.to
     },
 
     // Načtení všech karet, patříčných do příslušné skupiny karet, pro animace (včetně obrázků)

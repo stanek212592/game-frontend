@@ -98,8 +98,6 @@ export const game = defineStore('game', {
       } else {
         this.setGameState(gameStatesEnum.COMPUTER_TURN)
         const player = this.players.find(p => p.id === playerId)
-        console.log(player)
-        console.log(playerId)
         this.setInfo("Hraje " + player.name)
       }
     },
@@ -109,9 +107,7 @@ export const game = defineStore('game', {
     },
     reset() {
       this.id = null
-      this.userActionDisabled = false
       this.rules = null
-      this.waitingForServer = false
       this.activePlayerId = null
       // this.players = []
       this.gameCards = []
@@ -128,8 +124,14 @@ export const game = defineStore('game', {
         case gameStatesEnum.WAITING_FOR_SERVER:
           // this.setInfo("Pracuji")
           break
+        case gameStatesEnum.PLAYER_TURN:
+          this.setInfo("Jsi na tahu")
+          break
         case gameStatesEnum.DEAL_CARDS:
           this.setInfo("Rozdávám karty")
+          break
+        case gameStatesEnum.GAME_OVER:
+          this.setInfo("Konec hry")
           break
         default:
           if (resetInfo) this.setInfo(null)

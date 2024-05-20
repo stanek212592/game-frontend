@@ -11,8 +11,8 @@ export default {
     maxCardsPerRow: 7,
     cardOverlap: 1.3,
     cardAngleView: -Math.PI / 2 - 0.8,
-    drawPilePosition: {x: 100, z: 0},
-    discardPilePosition: {x: -100, z: 0},
+    drawPilePosition: {x: 100, z: 200},
+    discardPilePosition: {x: -100, z: 200},
   },
 
   // Nastavení velikosti karet

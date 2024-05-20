@@ -3,6 +3,7 @@
 
 export default {
   zrusit: 'Zrušit',
+  zavrit: 'Zavřít',
   prihlasit: 'Přihlásit',
   odhlasit: 'Odhlásit',
   uzivatelske_jmeno: 'Uživatelské jméno',

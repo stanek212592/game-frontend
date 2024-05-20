@@ -13,23 +13,26 @@ async function moveCardVertically(card, stepSize = game().animate.stepSize, fina
   let animationFrameId = null
   return new Promise((resolve) => {
     const animate = () => {
-      if (Math.abs(card.position.y - finalLevel) <= stepSize) {
-        card.position.y = finalLevel
-        resolve(true)
-        return
-      }
-      card.position.y += direction * stepSize
-
       if (game().state === gameStatesEnum.NO_GAME) {
         if (animationFrameId) cancelAnimationFrame(animationFrameId);
         resolve(false);
         return;
       }
+
+      if (Math.abs(card.position.y - finalLevel) <= stepSize) {
+        card.position.y = finalLevel
+        resolve(true)
+        return
+      }
+
+      card.position.y += direction * stepSize
+
       animationFrameId = requestAnimationFrame(animate)
     }
     animate()
   })
 }
+
 
 // Pophyb karty dle směru a vzálenosti
 async function moveCard(card, distance = 100, direction = Math.PI, stepSize = game().animate.stepSize,) {
@@ -129,11 +132,13 @@ async function rotateCardBy(card, angleX = null, angleY = null, angleZ = null) {
   })
 }
 
+
 // Pophyb karty do pozice s možností natočení karty
-async function moveCardTo(card, destination = {x: 0, z: 0}, targetAngleZ = null, stepSize = game().animate.stepSize,) {
+async function moveCardTo(card, destination = {x: 0, z: 0}, targetAngleZ = null, stepSize = game().animate.stepSize) {
   destination.x = utils.round(destination.x)
   destination.z = utils.round(destination.z)
   stepSize *= game().speed
+  let angleSize = game().animate.angleSize * game().speed
   const cardPosi = card.position
   let position = 0
   const direction = Math.atan2(destination.z - cardPosi.z, destination.x - cardPosi.x)
@@ -142,32 +147,41 @@ async function moveCardTo(card, destination = {x: 0, z: 0}, targetAngleZ = null,
   let animationFrameId = null
   return new Promise((resolve) => {
     const animate = () => {
-      if (distance - position <= stepSize) {
-        card.position.x = utils.round(destination.x)
-        card.position.z = utils.round(destination.z)
+      const remainingDistance = distance - position
+
+      // Posunutí ve směru translace
+      if (remainingDistance <= stepSize) {
+        card.position.x = destination.x
+        card.position.z = destination.z
+        position = distance // Ensure position reaches the exact distance
+      } else {
+        card.position.x += vector.x
+        card.position.z += vector.z
+        position += stepSize
+      }
+
+      // Pokud je definován cílový úhel natočení ve směru z
+      if (targetAngleZ !== null) {
+        const angleDiff = targetAngleZ - card.rotation.z
+        if (Math.abs(angleDiff) <= angleSize) {
+          card.rotation.z = targetAngleZ
+          targetAngleZ = null
+        } else {
+          card.rotation.z += Math.sign(angleDiff) * angleSize
+        }
+      }
+
+      if (remainingDistance <= stepSize && targetAngleZ === null) {
         resolve(true)
         return
       }
 
-      // Posunutí ve směru trasnslace
-      card.position.x += vector.x
-      card.position.z += vector.z
-
-      // Pokud je definován cílový úhel natočení ve směru z
-      if (targetAngleZ !== null && Math.abs(card.rotation.z - targetAngleZ) <= game().animate.angleSize) {
-        card.rotation.z = targetAngleZ
-        targetAngleZ = null
-      } else if (targetAngleZ !== null) {
-        card.rotation.z += game().animate.angleSize
-      }
-
-      position += stepSize
       if (game().state === gameStatesEnum.NO_GAME) {
-        if (animationFrameId) cancelAnimationFrame(animationFrameId);
-        resolve(false);
-        return;
-
+        if (animationFrameId) cancelAnimationFrame(animationFrameId)
+        resolve(false)
+        return
       }
+
       animationFrameId = requestAnimationFrame(animate)
     }
     animate()
