@@ -8,6 +8,7 @@ export const appSetting = defineStore('appSetting', {
     showMenu: true,
     menuSelectedItem: '',
     local: false,
+    axiosRequests: {},
   }),
   getters: {
     getLocked(state) {
