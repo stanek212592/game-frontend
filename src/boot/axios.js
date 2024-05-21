@@ -108,6 +108,40 @@ const post = async (url, data, lock = false, addResetTokenTo = '') => {
   return promise
 }
 
+// Post dle požadavků aplikace
+const upload = async (url, file, data, lock = false, addResetTokenTo = '') => {
+  if (lock) appSetting().lock()
+
+  const CancelToken = axios.CancelToken;
+  const source = CancelToken.source();
+  const id = Date.now()
+  const formData = new FormData()
+  if (file != null)
+    formData.append('file', file)
+  for (const prop in data) {
+    formData.append(prop, JSON.stringify(data[prop]))
+  }
+
+  const promise = new Promise((resolve) => {
+    api.post(requestUrl(url), formData, {headers: {'Content-Type': 'multipart/form-data'}})
+      .then(resp => {
+        resolve(resp.data)
+      })
+      .catch(e => {
+        handleExceptions(e)
+        resolve(null)
+      })
+      .finally(() => {
+        if (addResetTokenTo) removeCancelTokenFromStore(addResetTokenTo, id)
+        if (lock) appSetting().unlock()
+      })
+  })
+
+  if (addResetTokenTo) addCancelTokenToStore(addResetTokenTo, source, id)
+
+  return promise
+}
+
 export default boot(({app}) => {
   // // for use inside Vue files (Options API) through this.$axios and this.$api
   //
@@ -121,6 +155,7 @@ export default boot(({app}) => {
 
   app.config.globalProperties.$get = get
   app.config.globalProperties.$post = post
+  app.config.globalProperties.$upload = upload
 })
 
 

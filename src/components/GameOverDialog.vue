@@ -7,6 +7,8 @@
       <q-card-section>
 <!--        <span style="font-size: 14pt; font-weight: bold;">Vítěz je:</span>-->
         <span style="font-size: 28pt; font-weight: bold; color: #0d47a1">{{ player?.name }}</span><br>
+        <q-img v-if="player?.avatar"
+               :src="player.avatar" style="margin-left: 10px; width: 350px; border-radius: 5px;"/>
         <!--        <span style="font-size: 14pt; font-weight: bold;">Vítěz je:</span>-->
       </q-card-section>
       <q-card-actions align="right" class="text-primary">

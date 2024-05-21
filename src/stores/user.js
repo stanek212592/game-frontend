@@ -9,6 +9,7 @@ export const user = defineStore('user', {
     surname: '',
     token: '',
     jwtDt: null,
+    avatar: null,
   }),
   // getters: {
   //   doubleCount: (state) => state.counter * 2,
@@ -21,6 +22,15 @@ export const user = defineStore('user', {
       this.firstname = user?.firstname || null
       this.surname = user?.surname || null
       this.token = user?.token || null
+      if (user?.avatar && user?.avatarImgType){
+        let avatar = user.avatar
+        if (!avatar.startsWith('data')){
+          avatar = 'data:' + user.avatarImgType + ';base64,' + avatar
+        }
+        this.avatar = avatar
+      }
+      else this.avatar = null
+
     },
   },
 });

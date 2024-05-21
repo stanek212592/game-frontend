@@ -62,7 +62,6 @@ export const game = defineStore('game', {
           const newPlayer = {
             id: p.userId,
             main: i === 0, // Hlavní hráč bude mít vždy index 0, řešeno na backu
-            avatar: p.avatar,
             name: playerName(p),
             cardInHandIds: p.cardIds,
             virtual: p.virtual,
@@ -72,6 +71,7 @@ export const game = defineStore('game', {
               Scene.tableConfig.radius * (countOfPlayers === 2 || countOfPlayers === 4 ? 0.75 : (countOfPlayers === 5 ? 0.85 : 0.9))
             ),
           }
+          newPlayer.avatar = p.avatar && p.avatar.startsWith('data') ? p.avatar : 'data:' + p.avatarImgType + ';base64,' + p.avatar
           list.push(newPlayer)
           this.settings.userIds = list.map(a => a.id)
         })

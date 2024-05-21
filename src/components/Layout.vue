@@ -20,16 +20,17 @@
           <span>Local</span>
           <div style="width: 100px;"/>
         </template>
-        {{ userDetails.firstname }} {{ userDetails.surname }}
+        <span style="font-size: 18pt;">{{ userDetails.firstname }} {{ userDetails.surname }}</span>
+        <q-img v-if="userDetails.avatar"
+          :src="userDetails.avatar" style="margin-left: 10px; height: 35px; max-width: 35px; border-radius: 5px;"/>
+
         <div style="width: 10px; "/>
-        <q-btn v-if="!userDetails?.loggedIn" style="margin: 3px;" color="secondary" label="Registrovat"/>
+        <q-btn v-if="!userDetails?.loggedIn" style="margin: 3px;" color="secondary" label="Registrovat"
+               @click="showRegisterDialog = true"/>
         <q-btn v-if="!userDetails?.loggedIn" style="margin: 3px;" color="secondary" :label="$t('prihlasit')"
                @click="showLoginDialog = true"/>
         <q-btn v-else style="margin: 3px;" color="secondary" :label="$t('odhlasit')"
                @click="logOut()"/>
-        <!--        <div style="width: 25px;"/>-->
-
-        <!--        <div style="margin: 5px; font-size: 7pt; position: absolute; top: 0; right: 0">v{{ version }}</div>-->
       </q-toolbar>
     </q-header>
 
@@ -39,6 +40,7 @@
       <left-menu/>
     </q-drawer>
     <login-dialog v-model="showLoginDialog"/>
+    <register-dialog v-model="showRegisterDialog" />
     <q-page-container style="min-height: 100vh;">
       <router-view style="height: calc(100vh - 50px)"/>
     </q-page-container>
@@ -54,12 +56,14 @@ import {appSetting} from "stores/appSetting";
 import LockApp from "components/LockApp.vue";
 import {game} from "stores/game";
 import LeftMenu from "components/LeftMenu.vue";
+import RegisterDialog from "components/RegisterDialog.vue";
 
 
 export default defineComponent({
   name: 'MainLayout',
 
   components: {
+    RegisterDialog,
     LeftMenu,
     LoginDialog,
     LockApp
@@ -68,6 +72,7 @@ export default defineComponent({
   data() {
     return {
       showLoginDialog: false,
+      showRegisterDialog: false,
       // showMenu: false
     }
   },
@@ -109,6 +114,12 @@ export default defineComponent({
       this.$router.push({path: '/'})
     },
 
+  },
+  mounted() {
+    setTimeout(()=>{
+     if (!this.userDetails.loggedIn && !this.showRegisterDialog)
+       this.showLoginDialog = true
+    }, 5000)
   }
 })
 </script>
