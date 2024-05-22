@@ -11,6 +11,7 @@ export default {
   prihlasit: 'Přihlásit',
   prijmeni: 'Příjmení',
   registrovat: 'Registrovat',
+  ulozit: 'Uložit',
   uzivatelske_jmeno: 'Uživatelské jméno',
   zavrit: 'Zavřít',
   zmenit: 'Změnit',

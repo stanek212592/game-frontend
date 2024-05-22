@@ -64,7 +64,6 @@ export default defineComponent({
   computed: {
     avatarsComp() {
       const length = this.avatars.length
-      console.log(Math.ceil(length / 3))
       const array = []
       for (let i = 0; i < Math.ceil(length / 3); i++) {
         const subArray = []
@@ -73,7 +72,6 @@ export default defineComponent({
         }
         array.push(subArray)
       }
-      console.log(array)
       return array;
     }
   },
@@ -98,6 +96,10 @@ export default defineComponent({
       }
     },
     handleClickAvatar(item) {
+      if (item.select && this.user.password) {
+        this.loginUser()
+        return
+      }
       this.avatars.forEach(a => a.select = false)
       item.select = true
       this.user.login = item.login
@@ -113,7 +115,7 @@ export default defineComponent({
       this.$post('/user_auth/login', data, true)
         .then(resp => {
           if (!resp) return
-          userStore().setUser(resp)
+          userStore().setUser(resp, resp.token)
           this.$router.push({path: '/game'})
           this.closeDialog()
         })

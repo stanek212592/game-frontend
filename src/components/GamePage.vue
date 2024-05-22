@@ -61,7 +61,6 @@ import SuitSelectDialog from "components/SuitSelectDialog.vue";
 import MoveTypesEnum from "components/game/moveTypesEnum";
 import {user} from "stores/user";
 import gameStatesEnum from "components/game/gameStatesEnum";
-import appConfig from "app/appConfig";
 import GameOverDialog from "components/GameOverDialog.vue";
 
 const raycaster = new THREE.Raycaster();
@@ -253,7 +252,7 @@ export default defineComponent({
                 false
               )
             await this.getDrawPileCard(this.getPlayer(move.to)) // Přesuneme kartu z dobíracího balíčku hráči do ruky
-            await this.shuffleIfNeeded()
+            await cardMoves.shuffleIfNeeded(this.scene, this.drawPileObject, ()=>this.createDrawPile())
             if (rules.numberOfCardsToDraw > 0) {
               if (this.activePlayer === this.mainPlayer) this.executeMove(move)
               return
@@ -306,62 +305,6 @@ export default defineComponent({
       }
     },
 
-    // Míchání karet
-    async shuffleIfNeeded() {
-      if (game().drawPileCardsIds.length === 0) {
-        const cards = []
-
-        const discard = game().discardPileCardsIds
-        const lastCardId = discard[discard.length - 1]
-        const shuffled = discard.slice(0, -1);
-        for (const id of shuffled) {
-          const card = game().gameCards.find(c => c.params.cardId === id)
-          await cardMoves.moveCard(card, appConfig.card.height * 1.1)
-          await cardMoves.moveCardVertically(card, undefined, Scene.tableConfig.height + 75 + cards.length)
-          await cardMoves.rotateCardTo(card, Math.PI / 2, 0, 0)
-          card.hidePicture(true)
-          await cardMoves.moveCardVertically(card, undefined, Scene.tableConfig.height + 150 + cards.length)
-          cards.push(card)
-        }
-
-        if (cards.length > 2)
-          for (let i = 0; i < 50; i++) {
-            const index = Math.floor(Math.random() * cards.length)
-            const randCard = cards[index];
-            await cardMoves.moveCard(randCard, 100, undefined, 15)
-            await cardMoves.moveCardVertically(randCard, 15, Scene.tableConfig.height + 150 + cards.length + i)
-            await cardMoves.moveCard(randCard, 100, 2 * Math.PI, 15)
-            for (let j = 0; j < cards.length; j++) {
-              const randCard = cards[j];
-              await cardMoves.moveCardVertically(randCard, 15, Scene.tableConfig.height + 150 + cards.length + j)
-            }
-          }
-
-        for (let i = 0; i < cards.length; i++) {
-          const card = cards[i]
-          await cardMoves.moveCardTo(card, appConfig.animate.drawPilePosition, undefined, 15)
-          await cardMoves.moveCardVertically(card, 15, Scene.tableConfig.height + i * 0.5)
-          game().drawPileCardsIds.push(card.params.cardId)
-          this.scene.remove(card)
-          this.scene.remove(this.drawPileObject)
-          this.createDrawPile()
-        }
-        game().drawPileCardsIds = this.shuffleArray(shuffled)
-        game().discardPileCardsIds = [lastCardId]
-        const lastCard = game().gameCards.find(c => c.params.cardId === lastCardId)
-        await cardMoves.moveCardVertically(lastCard, 15, Scene.tableConfig.height + appConfig.card.depth)
-
-      }
-    },
-
-    shuffleArray(array) {
-      for (let i = array.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
-      }
-      return array;
-    },
-
     // Přidání balíčku karet
     createDrawPile() {
       const drawPileSize = game().drawPileCardsIds.length
@@ -379,7 +322,6 @@ export default defineComponent({
         drawPile.position.z = game().animate.drawPilePosition.z
         this.scene.add(drawPile)
       }
-
       this.drawPileObject = drawPile
     },
 
@@ -575,6 +517,7 @@ export default defineComponent({
 
     // Přensun karty z balíčku hráči do ruky
     async getDrawPileCard(player, onlyPickup) {
+      if (game().state === gameStatesEnum.NO_GAME) return
       const drawPileCardsSize = game().drawPileCardsIds.length
       if (!drawPileCardsSize) {
         game().setGameState(gameStatesEnum.ERROR)
@@ -584,6 +527,7 @@ export default defineComponent({
       // Vzít první kartu a odebrat ji z balíčku
       const cardId = game().drawPileCardsIds[0]
       const newCard = game().gameCards.find(c => c.params.cardId === cardId)
+      if (!newCard) return
       game().drawPileCardsIds = game().drawPileCardsIds.slice(1)
       newCard.params.selectable = false
 
@@ -605,7 +549,7 @@ export default defineComponent({
 
       // Virtualizace odebrání karty z balíču
       this.scene.remove(drawPile)
-      this.createDrawPile(pilePosition.x, pilePosition.z)
+      this.createDrawPile()
 
       // Zvednutí karty z balíčku
       if (!await cardMoves.moveCardVertically(newCard)) return false
@@ -781,6 +725,7 @@ export default defineComponent({
     // Otevřenní dialogu pro výběr barvy
     openSelectSuitDialog() {
       this.$get('prsi/suits', {groupId: game().settings.cardGroupId}).then(resp => {
+        if (!resp) return
         this.itemsSelectSuits = []
         resp.forEach(item => {
           if (!item.image.startsWith('data:image')) {
@@ -949,6 +894,7 @@ export default defineComponent({
       const nextPlayerId = this.showNextPlayerNameBeforeServerResponse()
       game().setGameState(gameStatesEnum.WAITING_FOR_SERVER)
       const nextState = await this.$post('prsi/next', data, false, this.axiosCancelTokenStoreName)
+      if(!nextState) return
       game().activePlayerId = nextPlayerId
       game().setGameState(
         this.mainPlayer === this.activePlayer ? gameStatesEnum.PLAYER_TURN : gameStatesEnum.COMPUTER_TURN,

@@ -1,6 +1,6 @@
 <template>
   <q-dialog :model-value="modelValue" @update:modelValue="closeDialog"
-            @before-show="clearDialog"
+            @before-show="handelOpenDialog"
             @keyup.esc="closeDialog(false)"
             persistent
   >
@@ -9,7 +9,7 @@
       <div v-if="avatar" class="close-button" style="position: absolute; top:82px; right: 22px; z-index: 20;"
            @click="resetFile"></div>
       <q-card-section>
-        <span style="font-size: 14pt; font-weight: bold;">Registrace hráče:</span>
+        <span style="font-size: 14pt; font-weight: bold;">{{ dialogTitle }}:</span>
       </q-card-section>
       <q-card-section>
         <div class="fp-row">
@@ -23,6 +23,7 @@
               (Login se již používá)
             </div>
             <q-input dense v-model="user.login" @blur="verifyLogin"
+                     :bg-color="loginIsAllreadyRegistered ? 'red-2' : ''"
                      autofocus @keyup.enter="registerUser"/>
             <div class="text-h6">{{ $t('krestni_jmeno') }}</div>
             <q-input dense v-model="user.firstname"
@@ -74,8 +75,8 @@
       </q-card-section>
       <q-card-actions align="right" class="text-primary">
         <q-btn flat color="secondary" :label="$t('zrusit')" @click="closeDialog(false)"/>
-        <q-btn flat :label="$t('registrovat')" @click="registerUser"
-               :disable="!user.login || !user.password || !user.password2"/>
+        <q-btn flat :label="saveBtn.label" @click="registerUser"
+               :disable="saveBtn.disabled"/>
       </q-card-actions>
 
     </q-card>
@@ -91,6 +92,7 @@ export default defineComponent({
   name: "RegisterDialog",
   props: {
     modelValue: {type: Boolean, default: false,},
+    editUser: {type: Boolean, default: false,},
   },
   data: () => ({
     user: {
@@ -108,16 +110,36 @@ export default defineComponent({
   }),
 
   computed: {
+    dialogTitle() {
+      if (this.editUser) return 'Editace hráče'
+      return 'Registrace hráče'
+    },
     differentPasswords() {
       if (!this.user.password || !this.user.password2) return false
       return this.user.password !== this.user.password2
+    },
+    currentUserLogin() {
+      return userStore().login
+    },
+    saveBtn() {
+      const label = this.editUser ? this.$t('ulozit') : this.$t('registrovat')
+      const disabled =
+        !this.user.login
+        || (!this.editUser && !this.user.password)
+        || this.user.password !== this.user.password2
+
+      return {
+        label: label,
+        disabled: disabled
+      }
     }
   },
 
   methods: {
     async verifyLogin() {
       this.loginIsAllreadyRegistered = false
-      const resp = await this.$get('/user_auth/verify_login', {login: this.user.login})
+      const resp = !this.user.login || this.user.login === this.currentUserLogin ? false :
+        await this.$get('/user_auth/verify_login', {login: this.user.login}) // vrací true pro existují login
       this.loginIsAllreadyRegistered = resp
       return !resp
     },
@@ -127,6 +149,21 @@ export default defineComponent({
         this.avatar = null;
       }
       this.$emit('update:modelValue', val)
+    },
+    handelOpenDialog() {
+      this.clearDialog()
+      if (this.editUser) {
+        const user = {...userStore()}
+        console.log(user)
+        this.user = {
+          login: user.login,
+          firstname: user.firstname,
+          surname: user.surname,
+          password: null,
+          password2: null,
+        }
+        this.avatar = user.avatar
+      }
     },
     clearDialog() {
       this.user = {
@@ -165,25 +202,39 @@ export default defineComponent({
 
     async registerUser() {
       const user = this.user
-      if (!user.login || !user.password || !user.password2) return
+      if (!user.login || user.password !== user.password2) return
 
-      const data = {
-        user: {
-          login: user.login,
-          firstname: user.firstname,
-          surname: user.surname,
-          password: user.password,
-        }
+
+      const obj = {
+        login: user.login,
+        firstname: user.firstname,
+        surname: user.surname,
       }
+
+      if (this.editUser) {
+        obj.id = userStore().id
+        if (user.password !== null) obj.password = user.password
+        if (!this.avatar && userStore().avatar) {
+          obj.avatarImgType = 'none'
+        }
+      } else {
+        obj.password = user.password
+      }
+
       const loginNotExist = await this.verifyLogin()
-      console.log(loginNotExist)
-      if (loginNotExist)
-        this.$upload('/user_auth', this.file, data, true).then(resp => {
-          if (!resp) return
-          userStore().setUser(resp)
-          this.$router.push({path: '/game'})
-          this.closeDialog()
-        })
+      if (!loginNotExist) return
+      console.log(obj)
+      const url = '/user_auth' + (this.editUser ? '/edit' : '')
+
+      this.$upload(url, this.file, {user: obj}, true).then(resp => {
+        if (!resp) return
+        let token = resp.token
+        token = token ? token : userStore().token
+        userStore().setUser(resp, token)
+        this.$router.push({path: '/game'})
+        this.closeDialog()
+      })
+
     }
   }
 })

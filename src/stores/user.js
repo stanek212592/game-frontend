@@ -15,13 +15,13 @@ export const user = defineStore('user', {
   //   doubleCount: (state) => state.counter * 2,
   // },
   actions: {
-    setUser(user = null) {
+    setUser(user = null, token = null) {
       if (user === null) appSetting().menuSelectedItem = ''
       this.id = user?.id || null
       this.login = user?.login || null
       this.firstname = user?.firstname || null
       this.surname = user?.surname || null
-      this.token = user?.token || null
+      this.token = token
       if (user?.avatar && user?.avatarImgType){
         let avatar = user.avatar
         if (!avatar.startsWith('data')){

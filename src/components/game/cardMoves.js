@@ -2,8 +2,9 @@ import {game} from "stores/game";
 import Scene from "components/game/scene";
 import utils from "components/game/utils";
 import gameStatesEnum from "components/game/gameStatesEnum";
+import appConfig from "app/appConfig";
 
-export default {moveCardVertically, moveCard, rotateCardTo, rotateCardBy, moveCardTo}
+export default {moveCardVertically, moveCard, rotateCardTo, rotateCardBy, moveCardTo, shuffleIfNeeded}
 
 // Zvedání karty
 async function moveCardVertically(card, stepSize = game().animate.stepSize, finalLevel = Scene.tableConfig.height + 150) {
@@ -101,6 +102,61 @@ async function rotateCardTo(card, targetAngleX = null, targetAngleY = null, targ
     }
     animate()
   })
+}
+
+// Míchání karet
+async function shuffleIfNeeded(scene, drawPileObject,callback) {
+  if (game().drawPileCardsIds.length === 0) {
+    const cards = []
+
+    const discard = game().discardPileCardsIds
+    const lastCardId = discard[discard.length - 1]
+    const shuffled = discard.slice(0, -1);
+    for (const id of shuffled) {
+      const card = game().gameCards.find(c => c.params.cardId === id)
+      await moveCard(card, appConfig.card.height * 1.1)
+      await moveCardVertically(card, undefined, Scene.tableConfig.height + 75 + cards.length)
+      await rotateCardTo(card, Math.PI / 2, 0, 0)
+      card.hidePicture(true)
+      await moveCardVertically(card, undefined, Scene.tableConfig.height + 150 + cards.length)
+      cards.push(card)
+    }
+
+    if (cards.length > 2)
+      for (let i = 0; i < 50; i++) {
+        const index = Math.floor(Math.random() * cards.length)
+        const randCard = cards[index];
+        await moveCard(randCard, 100, undefined, 15)
+        await moveCardVertically(randCard, 15, Scene.tableConfig.height + 150 + cards.length + i)
+        await moveCard(randCard, 100, 2 * Math.PI, 15)
+        for (let j = 0; j < cards.length; j++) {
+          const randCard = cards[j];
+          await moveCardVertically(randCard, 15, Scene.tableConfig.height + 150 + cards.length + j)
+        }
+      }
+
+    for (let i = 0; i < cards.length; i++) {
+      const card = cards[i]
+      await moveCardTo(card, appConfig.animate.drawPilePosition, undefined, 15)
+      await moveCardVertically(card, 15, Scene.tableConfig.height + i * 0.5)
+      game().drawPileCardsIds.push(card.params.cardId)
+      scene.remove(card)
+      scene.remove(drawPileObject)
+      callback()
+    }
+    game().drawPileCardsIds = shuffleArray(shuffled)
+    game().discardPileCardsIds = [lastCardId]
+    const lastCard = game().gameCards.find(c => c.params.cardId === lastCardId)
+    await moveCardVertically(lastCard, 15, Scene.tableConfig.height + appConfig.card.depth)
+  }
+}
+
+function shuffleArray(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
 }
 
 // Otočení karty o úhel v ose

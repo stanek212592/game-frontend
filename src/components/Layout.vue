@@ -20,15 +20,17 @@
           <span>Local</span>
           <div style="width: 100px;"/>
         </template>
-        <span style="font-size: 18pt;">{{ userDetails.firstname }} {{ userDetails.surname }}</span>
-        <q-img v-if="userDetails.avatar"
-          :src="userDetails.avatar" style="margin-left: 10px; height: 35px; max-width: 35px; border-radius: 5px;"/>
+        <span class="cursor-pointer" style="font-size: 18pt;" @click="editUser">{{
+            userDetails.firstname
+          }} {{ userDetails.surname }}</span>
+        <q-img v-if="userDetails.avatar" class="cursor-pointer" @click="editUser"
+               :src="userDetails.avatar" style="margin-left: 10px; height: 35px; max-width: 35px; border-radius: 5px;"/>
 
         <div style="width: 10px; "/>
         <q-btn v-if="!userDetails?.loggedIn" style="margin: 3px;" color="secondary" label="Registrovat"
-               @click="showRegisterDialog = true"/>
+               @click="openRegister"/>
         <q-btn v-if="!userDetails?.loggedIn" style="margin: 3px;" color="secondary" :label="$t('prihlasit')"
-               @click="showLoginDialog = true"/>
+               @click="openLogin"/>
         <q-btn v-else style="margin: 3px;" color="secondary" :label="$t('odhlasit')"
                @click="logOut()"/>
       </q-toolbar>
@@ -40,7 +42,8 @@
       <left-menu/>
     </q-drawer>
     <login-dialog v-model="showLoginDialog"/>
-    <register-dialog v-model="showRegisterDialog" />
+    <register-dialog v-model="showRegisterDialog"/>
+    <register-dialog v-model="showEditDialog" :edit-user="showEditDialog"/>
     <q-page-container style="min-height: 100vh;">
       <router-view style="height: calc(100vh - 50px)"/>
     </q-page-container>
@@ -49,7 +52,7 @@
 </template>
 
 <script>
-import {defineComponent, ref} from 'vue'
+import {defineComponent} from 'vue'
 import {user} from "stores/user";
 import LoginDialog from "components/LoginDialog.vue";
 import {appSetting} from "stores/appSetting";
@@ -71,18 +74,18 @@ export default defineComponent({
 
   data() {
     return {
+      anyWasOpened: false,
       showLoginDialog: false,
       showRegisterDialog: false,
-      // showMenu: false
+      showEditDialog: false,
     }
   },
 
   computed: {
-    isDev(){
+    isDev() {
       return process.env.DEV
     },
     version() {
-      //TODO doplnit načítání verze
       return process.env.version
     },
     userDetails() {
@@ -97,10 +100,7 @@ export default defineComponent({
     appSetting() {
       return appSetting()
     },
-    user(){
-      return user()
-    },
-    game(){
+    game() {
       return game()
     }
   },
@@ -113,12 +113,25 @@ export default defineComponent({
       user().setUser()
       this.$router.push({path: '/'})
     },
-
+    editUser() {
+      console.log('edit')
+      this.anyWasOpened = true
+      this.showEditDialog = true
+    },
+    openLogin(){
+      this.anyWasOpened = true
+      this.showLoginDialog = true
+    },
+    openRegister(){
+      this.anyWasOpened = true
+      this.showRegisterDialog = true
+    }
   },
   mounted() {
-    setTimeout(()=>{
-     if (!this.userDetails.loggedIn && !this.showRegisterDialog)
-       this.showLoginDialog = true
+    this.anyWasOpened = false
+    setTimeout(() => {
+      if (!this.userDetails.loggedIn && !this.showRegisterDialog && !this.anyWasOpened)
+        this.showLoginDialog = true
     }, 5000)
   }
 })
