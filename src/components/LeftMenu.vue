@@ -46,6 +46,7 @@
       </div>
       <q-slider v-model="gameSpeed" :min="1" :max="60"/>
     </q-item>
+    {{ game.discardPileCards }}
 <!--    <q-item class="fp-column">-->
 <!--      <span>Z balíčku vzít: {{ game.cardsToDraw }}</span>-->
 <!--      <span>Lze vyhodit: {{ game.rules?.permittedCardIdsOnDiscardPile.length ? 'ANO' : 'NE' }}</span>-->

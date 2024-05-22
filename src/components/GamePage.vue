@@ -111,6 +111,8 @@ export default defineComponent({
     timeouts: [],
     axiosCancelTokenStoreName: 'game',
     // fetchPromises: [],
+
+    cardOnDrawPileUsePower: false,
   }),
 
   computed: {
@@ -252,7 +254,7 @@ export default defineComponent({
                 false
               )
             await this.getDrawPileCard(this.getPlayer(move.to)) // Přesuneme kartu z dobíracího balíčku hráči do ruky
-            await cardMoves.shuffleIfNeeded(this.scene, this.drawPileObject, ()=>this.createDrawPile())
+            await cardMoves.shuffleIfNeeded(this.scene, this.drawPileObject, () => this.createDrawPile())
             if (rules.numberOfCardsToDraw > 0) {
               if (this.activePlayer === this.mainPlayer) this.executeMove(move)
               return
@@ -611,6 +613,7 @@ export default defineComponent({
 
     // Zastavení probíhají hry a vymazání herních proměnných
     resetGame() {
+      this.cardOnDrawPileUsePower = false
       this.resetScene()
       game().reset()
       this.timeouts.forEach(clearTimeout);
@@ -829,8 +832,6 @@ export default defineComponent({
     },
 
     gameOver(move) {
-      console.log('ukončit hru')
-      console.log(move)
       game().activePlayerId = null
       game().setGameState(gameStatesEnum.GAME_OVER)
       this.showGameOverDialog = true
@@ -863,7 +864,15 @@ export default defineComponent({
             Cards.createTexturedMaterial(c.face),
             this.materials.cardBack,
             this.materials.cardFrame,
-            {cardId: c.id, selectable: true, face: c.face, power: c.power, powerValue: c.powerValue},
+            {
+              cardId: c.id,
+              selectable: true,
+              face: c.face,
+              power: c.power,
+              powerValue: c.powerValue,
+              cardValue: c.cardValue,
+              suit: c.suit
+            },
           )
         )
         delete c.face
@@ -873,12 +882,58 @@ export default defineComponent({
 
     // Získání výchozích parametrů pro spuštění hry
     async getNewGameFromServer(data) {
-      return await this.$post('prsi/start', data, false, this.axiosCancelTokenStoreName)
+      const result = await this.$post('prsi/start', data, false, this.axiosCancelTokenStoreName)
+      console.log('Hra načtena')
+      return result
     },
 
     // Odeslání aktuálního stavu hry na server a příjem dalších tahů ze serveru
     async getNextPlayerActions() {
       // Kontrola, jeslti nedošel balíček
+
+      let trainningData = null
+
+      if (game().activePlayerId === this.mainPlayer.id) {
+        let lastMove = game().lastPlayerMove
+        const opponents = game().players.filter(a => a !== this.mainPlayer).map(o => ({
+          id: o.id,
+          count: o.cardInHandIds.length
+        }))
+
+        let discard = []
+        game().discardPileCardsIds.forEach(c => {
+          const a = game().gameCards.find(a => a.params.cardId === c).params
+          discard.push({id: a.cardId, value: a.suit + '-' + a.cardValue.name, power: a.power})
+        })
+
+        const mainPlayerCardIds = game().players[0] ? game().players[0].cardInHandIds : []
+        let playerCards = game().gameCards
+          .filter(c => mainPlayerCardIds.includes(c.params.cardId))
+          .map(a => ({id: a.params.cardId, value: a.params.suit + '-' + a.params.cardValue.name}))
+
+        const card = discard[discard.length - 1]
+        if (game().lastPlayerMove === moveTypesEnum.PLAYER_TO_DISCARD) {
+          const card = discard[discard.length - 1]
+          playerCards.push({id: card.id, value: card.value})
+          discard = discard.slice(0, discard.length - 1)
+          lastMove += ',id:' + card.id + ',' + card.value
+          if (card.power === 'SELECT_SUIT') lastMove += '->' + game().rules.suit
+        } else if (card.power === 'SELECT_SUIT') {
+          discard[discard.length-1].value += '->' + game().rules.suit
+        }
+
+        if (game().lastPlayerMove === moveTypesEnum.DRAW_TO_PLAYER) {
+          playerCards = playerCards.slice(0, discard.length - 1)
+        }
+
+        trainningData = {
+          playersCards: playerCards,
+          opponentCards: opponents,
+          discardPileCards: discard,
+          lastCardEffect: !!this.cardOnDrawPileUsePower,
+          lastMove: lastMove,
+        }
+      }
 
       if (game().state === gameStatesEnum.NO_GAME) return
       const data = {
@@ -889,12 +944,17 @@ export default defineComponent({
         rules: game().rules,
         lastMove: game().lastPlayerMove,
         lastMoveBy: game().activePlayerId,
+        trainningData: trainningData
       }
 
       const nextPlayerId = this.showNextPlayerNameBeforeServerResponse()
       game().setGameState(gameStatesEnum.WAITING_FOR_SERVER)
       const nextState = await this.$post('prsi/next', data, false, this.axiosCancelTokenStoreName)
-      if(!nextState) return
+      console.log('Další tah ze serveru')
+      if (!nextState) return
+      this.cardOnDrawPileUsePower = nextState?.rules?.suit || nextState?.rules?.numberOfCardsToDraw !== 1
+
+
       game().activePlayerId = nextPlayerId
       game().setGameState(
         this.mainPlayer === this.activePlayer ? gameStatesEnum.PLAYER_TURN : gameStatesEnum.COMPUTER_TURN,
