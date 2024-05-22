@@ -8,10 +8,10 @@
                icon="menu" aria-label="Menu"
                @click="toggleLeftDrawer"/>
         <q-toolbar-title>
-          Prší
+          {{ appName }}
           <q-badge transparent align="middle" color="orange">v{{ version }}</q-badge>
 
-          <span style="margin-left: 100px; font-size: 14px;">Stav hry: {{ game.state }}</span>
+          <span v-if="isDev" style="margin-left: 100px; font-size: 14px;">Stav hry: {{ game.state }}</span>
 
         </q-toolbar-title>
         <template v-if="isDev">
@@ -84,6 +84,9 @@ export default defineComponent({
   computed: {
     isDev() {
       return process.env.DEV
+    },
+    appName(){
+      return process.env.appName
     },
     version() {
       return process.env.version
